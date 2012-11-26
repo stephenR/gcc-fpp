@@ -54,6 +54,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssaexpand.h"
 #include "target-globals.h"
 #include "params.h"
+#include "fp_protect.h"
 
 /* Decide whether a function's arguments should be processed
    from first to last or from last to first.
@@ -157,7 +158,6 @@ static void emit_single_push_insn (enum machine_mode, rtx, tree);
 static void do_tablejump (rtx, enum machine_mode, rtx, rtx, rtx, int);
 static rtx const_vector_from_tree (tree);
 static void write_complex_part (rtx, rtx, bool);
-static void func_pointer_protect_assignment (tree to, tree from);
 
 /* This macro is used to determine whether move_by_pieces should be called
    to perform a structure copy.  */
@@ -11137,116 +11137,6 @@ get_personality_function (tree decl)
     gcc_assert (personality != NULL_TREE);
 
   return XEXP (DECL_RTL (personality), 0);
-}
-
-static tree
-get_func_pointer_guard (tree node)
-{
-  tree node_var = node;
-
-  if (TREE_CODE (node) == ADDR_EXPR)
-    return NULL;
-
-  if (TREE_CODE (node) == SSA_NAME)
-    node_var = SSA_NAME_VAR (node_var);
-
-  return VAR_DECL_GUARD (node_var);
-}
-
-static void
-func_pointer_protect_check (tree node, tree guard)
-{
-  tree guard_decl = targetm.stack_protect_guard ();
-  rtx label = gen_label_rtx ();
-  rtx x, y, tmp;
-
-  x = expand_normal (guard);
-  y = expand_normal (guard_decl);
-
-  /* Allow the target to compare Y with X without leaking either into
-     a register.  */
-  switch (HAVE_stack_protect_test != 0)
-    {
-    case 1:
-      tmp = gen_stack_protect_test (x, y, label);
-      if (tmp)
-	{
-	  emit_insn (tmp);
-	  break;
-	}
-      /* FALLTHRU */
-
-    default:
-      emit_cmp_and_jump_insns (x, y, EQ, NULL_RTX, ptr_mode, 1, label);
-      break;
-    }
-
-  /* The noreturn predictor has been moved to the tree level.  The rtl-level
-     predictors estimate this branch about 20%, which isn't enough to get
-     things moved out of line.  Since this is the only extant case of adding
-     a noreturn function at the rtl level, it doesn't seem worth doing ought
-     except adding the prediction by hand.  */
-  tmp = get_last_insn ();
-  if (JUMP_P (tmp))
-    predict_insn_def (tmp, PRED_NORETURN, TAKEN);
-
-  expand_call (targetm.stack_protect_fail (), NULL_RTX, /*ignore=*/true);
-  free_temp_slots ();
-  emit_label (label);
-}
-
-/* TODO: implement stack protect set equivalent */
-//#ifndef HAVE_stack_protect_set
-# define HAVE_stack_protect_set		0
-# define gen_stack_protect_set(x,y)	(gcc_unreachable (), NULL_RTX)
-//#endif
-
-void
-func_pointer_protect_assignment (tree to, tree from)
-{
-  tree guard_decl;
-  tree to_guard = get_func_pointer_guard (to);
-  tree from_guard = get_func_pointer_guard (from);
-  rtx x, y;
-
-  /* TODO: can we rely on FROM_GUARD and TO_GUARD being initalized with NULL? */
-  /* the TO function pointer does not need a guard, e.G. it's a register,
-     simply checking the FROM_GUARD is enough. */
-  if (!to_guard)
-    if (from_guard)
-      func_pointer_protect_check (from, from_guard);
-    return;
-
-
-  /* If FROM has a guard, copy it to TO */
-  if (from_guard)
-    {
-      guard_decl = from_guard;
-    }
-  /* Since FROM does not have a guard, create one */
-  else
-    {
-      /* TODO */
-      guard_decl = targetm.stack_protect_guard ();
-    }
-  
-  x = expand_normal (to_guard);
-  y = expand_normal (guard_decl);
-
-  /* Allow the target to copy from Y to X without leaking Y into a
-     register.  */
-  if (HAVE_stack_protect_set)
-    {
-      rtx insn = gen_stack_protect_set (x, y);
-      if (insn)
-	{
-	  emit_insn (insn);
-	  return;
-	}
-    }
-
-  /* Otherwise do a straight move.  */
-  emit_move_insn (x, y);
 }
 
 #include "gt-expr.h"
