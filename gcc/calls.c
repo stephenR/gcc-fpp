@@ -43,6 +43,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "except.h"
 #include "dbgcnt.h"
 #include "tree-flow.h"
+#include "fp_protect.h"
 
 /* Like PREFERRED_STACK_BOUNDARY but in units of bytes, not bits.  */
 #define STACK_BYTES (PREFERRED_STACK_BOUNDARY / BITS_PER_UNIT)
@@ -2987,6 +2988,13 @@ expand_call (tree exp, rtx target, int ignore)
 	}
 
       funexp = rtx_for_function_call (fndecl, addr);
+
+      /* if this is an indirect call and the function pointer is guarded,
+         remove the guard first.  */
+      if (!fndecl && func_pointer_has_guard (TREE_OPERAND (addr, 0)))
+        {
+          funexp = func_pointer_prepare_call(funexp);
+        }
 
       /* Figure out the register where the value, if any, will come back.  */
       valreg = 0;
