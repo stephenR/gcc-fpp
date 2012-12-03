@@ -2991,9 +2991,20 @@ expand_call (tree exp, rtx target, int ignore)
 
       /* if this is an indirect call and the function pointer is guarded,
          remove the guard first.  */
-      if (!fndecl && func_pointer_has_guard (TREE_OPERAND (addr, 0)))
+      if (!fndecl)
         {
-          funexp = func_pointer_prepare_call(funexp);
+          tree fp_var;
+          if (TREE_CODE (addr) == SSA_NAME)
+            {
+              fp_var = SSA_NAME_VAR (addr);
+            }
+          else
+            {
+              fp_var = TREE_OPERAND (addr, 0);
+            }
+
+          if (func_pointer_has_guard (fp_var))
+            funexp = func_pointer_prepare_call(funexp);
         }
 
       /* Figure out the register where the value, if any, will come back.  */

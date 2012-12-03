@@ -8,14 +8,21 @@
 #include "target.h"
 #include "rtl.h"
 #include "expr.h"
+#include "optabs.h"
 
-static rtx get_guard_rtx();
+static rtx get_guard_reg();
+static void func_pointer_toggle_guard (rtx fp);
 
 bool func_pointer_has_guard (tree var)
 {
   /* TODO for now all pointers are protected, this will change when
      compatibility features are implemented */
-  return !CONSTANT_CLASS_P (var);
+  //if (CONSTANT_CLASS_P (var))
+  //  return false;
+  if (TREE_CONSTANT (var))
+    return false;
+
+  return true;
 }
 
 void
@@ -37,156 +44,120 @@ func_pointer_protect_assignment (tree to, tree from)
     func_pointer_remove_guard (to);
 }
 
-#ifndef HAVE_fp_protect_add
-# define HAVE_fp_protect_add		0
-# define gen_fp_protect_add(x,y)	(gcc_unreachable (), NULL_RTX)
-#endif
-
 void func_pointer_add_guard (tree var)
 {
-  tree guard_decl;
-  rtx x, y;
-  //rtx xor_rtx, sub_rtx;
-
-  guard_decl = targetm.stack_protect_guard ();
-
-  x = expand_normal (var);
-  y = expand_normal (guard_decl);
-
-  if (HAVE_fp_protect_add)
-    {
-      rtx insn = gen_fp_protect_add (x, y);
-      if (insn)
-        {
-          emit_insn (insn);
-          return;
-        }
-    }
-
-  gcc_unreachable();
-  /* TODO add/test regular instructions */
-
-  //xor_rtx = expand_binop (Pmode, xor_optab, x, y,
-  //      		 xor_rtx, 0, OPTAB_DIRECT);
-  //sub_rtx = expand_binop (Pmode, sub_optab, xor_rtx, y,
-  //      		 sub_rtx, 0, OPTAB_DIRECT);
-
-  //emit_move_insn (x, sub_rtx);
+  rtx fp = expand_normal (var);
+  func_pointer_toggle_guard (fp);
 }
 
-#ifndef HAVE_fp_protect_rm_mem
-# define HAVE_fp_protect_rm_mem		0
-# define gen_fp_protect_rm_mem(x,y)	(gcc_unreachable (), NULL_RTX)
+rtx func_pointer_prepare_call (rtx fp)
+{
+  rtx call_reg;
+
+  if (!REG_P (fp))
+    {
+      call_reg = gen_reg_rtx (ptr_mode);
+      emit_move_insn (call_reg, fp);
+    }
+  else
+    {
+      call_reg = fp;
+    }
+
+  func_pointer_toggle_guard (call_reg);
+
+  return call_reg;
+}
+
+void func_pointer_toggle_guard (rtx fp)
+{
+  rtx end_label;
+  rtx clear_guard_label;
+
+  rtx guard_reg;
+  rtx fp_reg;
+
+  rtx xor_rtx;
+
+  rtx const_null;
+
+  clear_guard_label = gen_label_rtx ();
+  end_label = gen_label_rtx ();
+  const_null = gen_rtx_CONST_INT(ptr_mode, 0);
+
+  if (REG_P (fp))
+    {
+      fp_reg = fp;
+    }
+  else
+    {
+      fp_reg = gen_reg_rtx (ptr_mode);
+      emit_move_insn (fp_reg, fp);
+    }
+
+  emit_cmp_and_jump_insns (fp_reg, const_null, EQ, NULL_RTX, ptr_mode, 1, end_label /*, prob=? TODO */);
+
+  guard_reg = get_guard_reg ();
+
+  emit_cmp_and_jump_insns (fp_reg, guard_reg, EQ, NULL_RTX, ptr_mode, 1, clear_guard_label /*, prob=? TODO */);
+
+  xor_rtx = expand_binop (ptr_mode, xor_optab, fp_reg, guard_reg,
+        		 fp_reg, 0, OPTAB_DIRECT);
+
+  if (!REG_P (fp))
+    {
+      emit_move_insn (fp, xor_rtx);
+    }
+
+  /* test if xor_rtx is a new temporary location that we want to be cleared.  */
+  if (xor_rtx != fp_reg)
+    {
+      emit_move_insn(xor_rtx, const_null);
+    }
+
+  emit_label (clear_guard_label);
+
+  if (!REG_P (fp))
+    {
+      emit_move_insn(fp_reg, const_null);
+    }
+
+  emit_move_insn(guard_reg, const_null);
+
+  emit_label (end_label);
+
+  /* TODO: is this ok? */
+  free_temp_slots ();
+}
+
+#ifndef HAVE_move_guard_to_reg
+# define HAVE_move_guard_to_reg		0
+# define gen_move_guard_to_reg(x,y)	(gcc_unreachable (), NULL_RTX)
 #endif
+
+rtx get_guard_reg ()
+{
+  rtx guard_reg = gen_reg_rtx (ptr_mode);
+  rtx guard = expand_normal (targetm.stack_protect_guard ());
+
+  if (HAVE_move_guard_to_reg)
+    {
+      rtx insn = gen_move_guard_to_reg (guard_reg, guard);
+      if (insn)
+	{
+	  emit_insn (insn);
+	  return guard_reg;
+	}
+    }
+
+  emit_move_insn(guard_reg, guard);
+
+  return guard_reg;
+}
 
 void func_pointer_remove_guard (tree var)
 {
+  /* TODO */
   gcc_unreachable();
-  /* TODO think about fp_protect_rm_mem */
-  //tree guard_decl;
-  //rtx x, y;
-  ////rtx xor_rtx, add_rtx;
-
-  //guard_decl = targetm.stack_protect_guard ();
-
-  //x = expand_normal (var);
-  //y = expand_normal (guard_decl);
-
-  //if (HAVE_fp_protect_rm_mem)
-  //  {
-  //    rtx insn = gen_fp_protect_rm_mem (x, y);
-  //    if (insn)
-  //      {
-  //        emit_insn (insn);
-  //        return;
-  //      }
-  //  }
-
-  //gcc_unreachable();
-  ///* TODO add/test regular instructions */
-
-  ////add_rtx = expand_binop (Pmode, add_optab, x, y,
-  ////      		 sub_rtx, 0, OPTAB_DIRECT);
-  ////xor_rtx = expand_binop (Pmode, xor_optab, add_rtx, y,
-  ////      		 xor_rtx, 0, OPTAB_DIRECT);
-
-  ////emit_move_insn (x, xor_rtx);
 }
-
-#ifndef HAVE_fp_protect_rm
-# define HAVE_fp_protect_rm		0
-# define gen_fp_protect_rm(x,y)	(gcc_unreachable (), NULL_RTX)
-#endif
-
-rtx func_pointer_prepare_call (rtx var)
-{
-  rtx call_reg = gen_reg_rtx (Pmode);
-  rtx guard = get_guard_rtx ();
-
-  if (HAVE_fp_protect_rm)
-    {
-      rtx insn = gen_fp_protect_rm (call_reg, guard);
-      if (insn)
-        {
-          emit_insn (insn);
-          return call_reg;
-        }
-    }
-
-  gcc_unreachable();
-  /* TODO add/test regular instructions */
-  return var;
-}
-
-rtx get_guard_rtx()
-{
-  rtx ret;
-  tree guard = targetm.stack_protect_guard ();
-
-  ret = expand_normal (guard);
-
-  return ret;
-}
-
-//void
-//func_pointer_protect_check (tree node, tree guard)
-//{
-//  tree guard_decl = targetm.stack_protect_guard ();
-//  rtx label = gen_label_rtx ();
-//  rtx x, y, tmp;
-//
-//  x = expand_normal (guard);
-//  y = expand_normal (guard_decl);
-//
-//  /* Allow the target to compare Y with X without leaking either into
-//     a register.  */
-//  switch (HAVE_stack_protect_test != 0)
-//    {
-//    case 1:
-//      tmp = gen_stack_protect_test (x, y, label);
-//      if (tmp)
-//	{
-//	  emit_insn (tmp);
-//	  break;
-//	}
-//      /* FALLTHRU */
-//
-//    default:
-//      emit_cmp_and_jump_insns (x, y, EQ, NULL_RTX, ptr_mode, 1, label);
-//      break;
-//    }
-//
-//  /* The noreturn predictor has been moved to the tree level.  The rtl-level
-//     predictors estimate this branch about 20%, which isn't enough to get
-//     things moved out of line.  Since this is the only extant case of adding
-//     a noreturn function at the rtl level, it doesn't seem worth doing ought
-//     except adding the prediction by hand.  */
-//  tmp = get_last_insn ();
-//  if (JUMP_P (tmp))
-//    predict_insn_def (tmp, PRED_NORETURN, TAKEN);
-//
-//  expand_call (targetm.stack_protect_fail (), NULL_RTX, /*ignore=*/true);
-//  free_temp_slots ();
-//  emit_label (label);
-//}
 
