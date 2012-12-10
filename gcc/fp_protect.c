@@ -71,6 +71,8 @@ rtx func_pointer_prepare_call (rtx fp)
 
 void func_pointer_toggle_guard (rtx fp)
 {
+  /* TODO CMOVcc / improvement without conditional jumps */
+  /* TODO branch prediction */
   rtx end_label;
   rtx clear_guard_label;
 
@@ -83,7 +85,7 @@ void func_pointer_toggle_guard (rtx fp)
 
   clear_guard_label = gen_label_rtx ();
   end_label = gen_label_rtx ();
-  const_null = gen_rtx_CONST_INT(ptr_mode, 0);
+  const_null = gen_rtx_CONST_INT (ptr_mode, 0);
 
   if (REG_P (fp))
     {
@@ -112,14 +114,14 @@ void func_pointer_toggle_guard (rtx fp)
   /* test if xor_rtx is a new temporary location that we want to be cleared.  */
   if (xor_rtx != fp_reg)
     {
-      emit_move_insn(xor_rtx, const_null);
+      emit_move_insn (xor_rtx, const_null);
     }
 
   emit_label (clear_guard_label);
 
   if (!REG_P (fp))
     {
-      emit_move_insn(fp_reg, const_null);
+      emit_move_insn (fp_reg, const_null);
     }
 
   emit_move_insn(guard_reg, const_null);
@@ -150,7 +152,7 @@ rtx get_guard_reg ()
 	}
     }
 
-  emit_move_insn(guard_reg, guard);
+  emit_move_insn (guard_reg, guard);
 
   return guard_reg;
 }
