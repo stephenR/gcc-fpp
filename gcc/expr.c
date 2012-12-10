@@ -4858,6 +4858,8 @@ expand_assignment (tree to, tree from, bool nontemporal)
       if (result)
 	preserve_temp_slots (result);
       pop_temp_slots ();
+      /* TODO: temporary assertion, handle function pointers here too? */
+      gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
       return;
     }
 
@@ -4918,6 +4920,8 @@ expand_assignment (tree to, tree from, bool nontemporal)
 	}
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
+      /* TODO: temporary assertion, handle function pointers here too? */
+      gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
       return;
     }
 
@@ -4951,6 +4955,8 @@ expand_assignment (tree to, tree from, bool nontemporal)
 
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
+      /* TODO: temporary assertion, handle function pointers here too? */
+      gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
       return;
     }
 
@@ -4980,6 +4986,8 @@ expand_assignment (tree to, tree from, bool nontemporal)
 
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
+      /* TODO: temporary assertion, handle function pointers here too? */
+      gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
       return;
     }
 
