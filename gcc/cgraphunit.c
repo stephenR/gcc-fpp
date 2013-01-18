@@ -194,6 +194,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "lto-streamer.h"
 #include "except.h"
 #include "regset.h"     /* FIXME: For reg_obstack.  */
+#include "fp_protect.h"
 
 /* Queue of cgraph nodes scheduled to be added into cgraph.  This is a
    secondary queue used during optimization to accommodate passes that
@@ -2078,6 +2079,9 @@ finalize_compilation_unit (void)
 
   /* Finally drive the pass manager.  */
   compile ();
+
+  if (flag_fp_protect)
+    func_pointer_generate_init_routine (main_input_filename);
 
   timevar_pop (TV_CGRAPH);
 }

@@ -14,3 +14,5 @@ extern void func_pointer_remove_guard (tree var);
 
 extern rtx func_pointer_prepare_call (rtx var);
 
+extern void func_pointer_generate_init_routine (const char* filename);
+
