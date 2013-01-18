@@ -13,7 +13,6 @@
 #include "cgraph.h"
 #include "toplev.h"
 
-static rtx get_guard_reg();
 static void func_pointer_toggle_guard (rtx fp);
 
 bool func_pointer_has_guard (tree var)
@@ -74,90 +73,6 @@ rtx func_pointer_prepare_call (rtx fp)
 
 void func_pointer_toggle_guard (rtx fp)
 {
-  /* TODO CMOVcc / improvement without conditional jumps */
-  /* TODO branch prediction */
-  rtx end_label;
-  rtx clear_guard_label;
-
-  rtx guard_reg;
-  rtx fp_reg;
-
-  rtx xor_rtx;
-
-  rtx const_null;
-
-  clear_guard_label = gen_label_rtx ();
-  end_label = gen_label_rtx ();
-  const_null = gen_rtx_CONST_INT (ptr_mode, 0);
-
-  if (REG_P (fp))
-    {
-      fp_reg = fp;
-    }
-  else
-    {
-      fp_reg = gen_reg_rtx (ptr_mode);
-      emit_move_insn (fp_reg, fp);
-    }
-
-  emit_cmp_and_jump_insns (fp_reg, const_null, EQ, NULL_RTX, ptr_mode, 1, end_label /*, prob=? TODO */);
-
-  guard_reg = get_guard_reg ();
-
-  emit_cmp_and_jump_insns (fp_reg, guard_reg, EQ, NULL_RTX, ptr_mode, 1, clear_guard_label /*, prob=? TODO */);
-
-  xor_rtx = expand_binop (ptr_mode, xor_optab, fp_reg, guard_reg,
-        		 fp_reg, 0, OPTAB_DIRECT);
-
-  if (!REG_P (fp))
-    {
-      emit_move_insn (fp, xor_rtx);
-    }
-
-  /* test if xor_rtx is a new temporary location that we want to be cleared.  */
-  if (xor_rtx != fp_reg)
-    {
-      emit_move_insn (xor_rtx, const_null);
-    }
-
-  emit_label (clear_guard_label);
-
-  if (!REG_P (fp))
-    {
-      emit_move_insn (fp_reg, const_null);
-    }
-
-  emit_move_insn(guard_reg, const_null);
-
-  emit_label (end_label);
-
-  /* TODO: is this ok? */
-  free_temp_slots ();
-}
-
-#ifndef HAVE_move_guard_to_reg
-# define HAVE_move_guard_to_reg		0
-# define gen_move_guard_to_reg(x,y)	(gcc_unreachable (), NULL_RTX)
-#endif
-
-rtx get_guard_reg ()
-{
-  rtx guard_reg = gen_reg_rtx (ptr_mode);
-  rtx guard = expand_normal (targetm.stack_protect_guard ());
-
-  if (HAVE_move_guard_to_reg)
-    {
-      rtx insn = gen_move_guard_to_reg (guard_reg, guard);
-      if (insn)
-	{
-	  emit_insn (insn);
-	  return guard_reg;
-	}
-    }
-
-  emit_move_insn (guard_reg, guard);
-
-  return guard_reg;
 }
 
 void func_pointer_remove_guard (tree var)
