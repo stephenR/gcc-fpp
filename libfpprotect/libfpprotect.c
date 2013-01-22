@@ -12,7 +12,7 @@ static const char jmp_asm[] = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
 
 struct jp_element {
 	char jmp_asm[sizeof(jmp_asm)];
-	void *dst_addr;
+	void *addr;
 	int refcnt;
 } __attribute__((packed));
 
@@ -142,7 +142,7 @@ void *__fpp_protect(void *p)
 		region = region->next;
 	}
 	memcpy(elem->jmp_asm, jmp_asm, sizeof(jmp_asm));
-	elem->dst_addr = p;
+	elem->addr = p;
 	elem->refcnt = 1;
 	lock(region);
 	return elem;
@@ -177,15 +177,23 @@ static void unlock(struct jp_region *region)
 
 static int try_resize(struct jp_region *region)
 {
-	size_t new_size = region->size + mmap_size;
 	/* TODO: how much to increase? */
-	region = mremap(region, region->size, new_size, 0);
-	if (region == MAP_FAILED)
+	size_t new_size = region->size + mmap_size;
+
+	if (mremap(region, region->size, new_size, 0) == MAP_FAILED)
 		return -1;
 
 	unlock(region);
 	region->free_stack = (char *) region + region->size;
 	region->size = new_size;
 	lock(region);
+}
+
+int __fpp_compare(const void *p, const void *q)
+{
+	const struct jp_element *first = p, *second = q;
+	if (first->addr == second->addr)
+		return 0;
+	return 1;
 }
 
