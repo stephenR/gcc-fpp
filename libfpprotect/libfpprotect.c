@@ -141,6 +141,11 @@ void *__fpp_protect(void *p)
 {
 	struct jp_element *elem = NULL;
 	struct jp_region *region = region_list;
+
+	/* ignore NULL pointer */
+	if (!p)
+		return p;
+
 	while (1) {
 		if (region->free_stack) {
 			unlock(region);
