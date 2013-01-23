@@ -8,6 +8,8 @@
 
 typedef void (*function_pointer_t)();
 
+#define DEBUG
+
 #ifdef __x86_64__
 static const char jmp_asm_pre[] = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00}; //jmp *(%rip)
 static const char jmp_asm_post[] = {};
@@ -239,5 +241,100 @@ int __fpp_eq(const void *p, const void *q)
 	}
 
 	return (p == q);
+}
+
+static struct jp_region *get_region_for(union jp_slot *slot) {
+	struct jp_region *region = region_list;
+	while (region) {
+		if (pointer_in_region(slot, region))
+			return region;
+		region = region->next;
+	}
+	return NULL;
+}
+
+void __fpp_del(void *p)
+{
+	struct jp_region *region;
+	union jp_slot *slot = (union jp_slot *) p;
+
+	if (!slot)
+		return;
+
+	if (!slot->filled.refcnt)
+		return;
+
+	region = get_region_for(slot);
+
+#ifdef DEBUG
+	if (!region) {
+		fprintf(stderr, "__fpp_del failed with slot=%p, aborting!", slot);
+		_exit(2);
+	}
+#endif
+
+	unlock(region);
+	--slot->filled.refcnt;
+	if (!slot->filled.refcnt) {
+		slot->filled.addr = NULL;
+		slot->empty.next = region->free_list;
+		region->free_list = slot;
+	}
+	lock(region);
+
+}
+
+void *__fpp_cpy(void *p)
+{
+	struct jp_region *region;
+	union jp_slot *slot = (union jp_slot *) p;
+
+	if (!slot)
+		return NULL;
+
+	if (!slot->filled.refcnt)
+		return slot;
+
+	region = get_region_for(slot);
+
+#ifdef DEBUG
+	if (!region) {
+		fprintf(stderr, "__fpp_cpy failed with slot=%p, aborting!", slot);
+		_exit(2);
+	}
+#endif
+
+	unlock(region);
+        ++slot->filled.refcnt;
+	lock(region);
+
+	return slot;
+}
+
+void __fpp_make_immutable(void *p)
+{
+	struct jp_region *region;
+	union jp_slot *slot = (union jp_slot *) p;
+
+	if (!slot)
+		return;
+
+	if (!slot->filled.refcnt)
+		return;
+
+	region = get_region_for(slot);
+
+#ifdef DEBUG
+	if (!region) {
+		fprintf(stderr, "__fpp_make_immutable failed with slot=%p, aborting!", slot);
+		_exit(2);
+	}
+#endif
+
+	unlock(region);
+        slot->filled.refcnt = 0;
+	lock(region);
+
+	return;
 }
 
