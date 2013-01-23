@@ -220,6 +220,8 @@ static int try_resize(struct jp_region *region)
 	region->free_stack = (union jp_slot *) ((char *) region + region->size);
 	region->size = new_size;
 	lock(region);
+
+	return 0;
 }
 
 int __fpp_eq(const void *p, const void *q)
