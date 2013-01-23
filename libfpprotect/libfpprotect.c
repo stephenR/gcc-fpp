@@ -8,11 +8,19 @@
 
 typedef void (*function_pointer_t)();
 
-static const char jmp_asm[] = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
+#ifdef __x86_64__
+static const char jmp_asm_pre[] = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00}; //jmp *(%rip)
+static const char jmp_asm_post[] = {};
+#endif
+#ifdef __i386__
+static const char jmp_asm_pre[] = {0x68};  //push $addr
+static const char jmp_asm_post[] = {0xc3}; //ret
+#endif
 
 struct jp_element {
-	char jmp_asm[sizeof(jmp_asm)];
+	char jmp_asm_pre[sizeof(jmp_asm_pre)];
 	void *addr;
+	char jmp_asm_post[sizeof(jmp_asm_post)];
 	int refcnt;
 } __attribute__((packed));
 
@@ -141,7 +149,8 @@ void *__fpp_protect(void *p)
 		lock(region);
 		region = region->next;
 	}
-	memcpy(elem->jmp_asm, jmp_asm, sizeof(jmp_asm));
+	memcpy(elem->jmp_asm_pre, jmp_asm_pre, sizeof(jmp_asm_pre));
+	memcpy(elem->jmp_asm_post, jmp_asm_post, sizeof(jmp_asm_post));
 	elem->addr = p;
 	elem->refcnt = 1;
 	lock(region);
