@@ -98,6 +98,30 @@ static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((u
 	return 0;
 }
 
+static void *region_end(struct jp_region *region)
+{
+	return (char *) region + region->size;
+}
+
+static int pointer_in_region(const void *p, struct jp_region *region)
+{
+	return (p >= (void *) region->slots && p < region_end(region));
+}
+
+static int pointer_in_region_list(const void *p)
+{
+	struct jp_region *region = region_list;
+
+	while (region) {
+		if(pointer_in_region(p, region)) {
+			return 1;
+		}
+		region = region->next;
+	}
+
+	return 0;
+}
+
 static struct jp_region *create_region()
 {
 	struct jp_region *region = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -122,7 +146,7 @@ void *__fpp_protect(void *p)
 			unlock(region);
 			elem = &region->free_stack->filled;
 			++region->free_stack;
-			if (region->free_stack >= region + region->size) {
+			if ((void *) region->free_stack >= region_end(region)) {
 				region->free_stack = NULL;
 			}
 			break;
@@ -159,8 +183,8 @@ void *__fpp_protect(void *p)
 
 function_pointer_t __fpp_verify(void *p)
 {
-	if(p < region_list || p >= (char *)region_list + region_list->size) {
-		puts("failed");
+	if(!pointer_in_region_list(p)) {
+		fprintf(stderr, "__fpp_verify failed with p=%p, aborting!", p);
 		_exit(1);
 	}
 	return p;
@@ -198,11 +222,15 @@ static int try_resize(struct jp_region *region)
 	lock(region);
 }
 
-int __fpp_compare(const void *p, const void *q)
+int __fpp_eq(const void *p, const void *q)
 {
-	const struct jp_element *first = p, *second = q;
-	if (first->addr == second->addr)
-		return 0;
-	return 1;
+	if (pointer_in_region_list(p)) {
+		p = ((const struct jp_element *) p)->addr;
+	}
+	if (pointer_in_region_list(q)) {
+		q = ((const struct jp_element *) q)->addr;
+	}
+
+	return (p == q);
 }
 
