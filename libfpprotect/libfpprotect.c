@@ -58,8 +58,7 @@ static void fpprotect_init()
 	dl_iterate_phdr (dl_iterate_phdr_callback, NULL);
 }
 
-static int
-dl_iterate_phdr_callback (struct dl_phdr_info *info, size_t x, void *data)
+static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((unused)) size_t size, __attribute__((unused)) void *data)
 {
 	int j;
 
@@ -71,7 +70,8 @@ dl_iterate_phdr_callback (struct dl_phdr_info *info, size_t x, void *data)
 		ElfW(Addr) start_addr = relocated_start_addr + unrelocated_start_addr;
 		ElfW(Word) size_in_memory = info->dlpi_phdr[j].p_memsz;
 
-		if (&region_list < start_addr || (long long) &region_list >= start_addr + size_in_memory)
+		if ((ElfW(Addr)) &region_list < start_addr
+				|| (ElfW(Addr)) &region_list >= start_addr + size_in_memory)
 			continue;
 
 		ElfW(Word) saved_flags = info->dlpi_phdr[j].p_flags;
@@ -107,7 +107,7 @@ static struct jp_region *create_region()
 		_exit(4);
 	}
 	/* TODO: is the mmap memory always initialized to 0? */
-	region->free_stack = &region->slots;
+	region->free_stack = region->slots;
 	region->size = mmap_size;
 	lock(region);
 	return region;
@@ -193,7 +193,7 @@ static int try_resize(struct jp_region *region)
 		return -1;
 
 	unlock(region);
-	region->free_stack = (char *) region + region->size;
+	region->free_stack = (union jp_slot *) ((char *) region + region->size);
 	region->size = new_size;
 	lock(region);
 }
