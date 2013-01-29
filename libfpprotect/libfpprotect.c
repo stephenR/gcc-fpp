@@ -58,7 +58,10 @@ static int try_resize(struct jp_region *region);
 static void fpprotect_init() __attribute__ ((constructor));
 static void fpprotect_init()
 {
-	dl_iterate_phdr (dl_iterate_phdr_callback, NULL);
+	if(!dl_iterate_phdr (dl_iterate_phdr_callback, NULL)) {
+		fprintf(stderr, "fpprotect_init failed, aborting!");
+		_exit(1);
+	}
 }
 
 static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((unused)) size_t size, __attribute__((unused)) void *data)
