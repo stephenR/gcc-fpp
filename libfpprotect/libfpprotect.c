@@ -6,8 +6,6 @@
 #include <link.h>
 #include <string.h>
 
-typedef void (*function_pointer_t)();
-
 #define DEBUG
 
 #ifdef __x86_64__
