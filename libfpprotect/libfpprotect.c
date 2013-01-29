@@ -44,6 +44,7 @@ struct jp_region {
 };
 
 static struct jp_region * const region_list = NULL;
+static struct jp_region * const * const volatile region_list_ptr = &region_list;
 
 #define INITIAL_NUM_ELEMENTS 256
 static const size_t mmap_size = sizeof(struct jp_region) + INITIAL_NUM_ELEMENTS*sizeof(union jp_slot);
@@ -112,7 +113,7 @@ static int pointer_in_region(const void *p, struct jp_region *region)
 
 static int pointer_in_region_list(const void *p)
 {
-	struct jp_region *region = region_list;
+	struct jp_region *region = *region_list_ptr;
 
 	while (region) {
 		if(pointer_in_region(p, region)) {
@@ -142,7 +143,7 @@ static struct jp_region *create_region()
 void *__fpp_protect(void *p)
 {
 	struct jp_element *elem = NULL;
-	struct jp_region *region = region_list;
+	struct jp_region *region = *region_list_ptr;
 
 	/* ignore NULL pointer */
 	if (!p)
@@ -162,7 +163,7 @@ void *__fpp_protect(void *p)
 		if (region->free_list) {
 			unlock(region);
 			elem = &region->free_list->filled;
-			region->free_list = region_list->free_list->empty.next;
+			region->free_list = (*region_list_ptr)->free_list->empty.next;
 			break;
 		} 
 
@@ -243,7 +244,7 @@ int __fpp_eq(const void *p, const void *q)
 }
 
 static struct jp_region *get_region_for(union jp_slot *slot) {
-	struct jp_region *region = region_list;
+	struct jp_region *region = *region_list_ptr;
 	while (region) {
 		if (pointer_in_region(slot, region))
 			return region;
