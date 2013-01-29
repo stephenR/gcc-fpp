@@ -57,7 +57,7 @@ static void fpprotect_init() __attribute__ ((constructor));
 static void fpprotect_init()
 {
 	if(!dl_iterate_phdr (dl_iterate_phdr_callback, NULL)) {
-		fprintf(stderr, "fpprotect_init failed, aborting!");
+		fprintf(stderr, "libfpprotect: fpprotect_init failed, aborting!");
 		_exit(1);
 	}
 }
@@ -85,7 +85,7 @@ static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((u
 
 		if (mprotect((void *)mp_low, mp_size, PROT_READ|PROT_WRITE|PROT_EXEC) == -1)
 		{
-			perror("mprotect");
+			perror("libfpprotect: mprotect");
 			_exit(1);
 		}
 
@@ -93,7 +93,7 @@ static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((u
 
 		if (mprotect((void *)mp_low, mp_size, saved_flags) == -1)
 		{
-			perror("mprotect");
+			perror("libfpprotect: mprotect");
 			_exit(3);
 		}
 
@@ -131,7 +131,7 @@ static struct jp_region *create_region()
 	struct jp_region *region = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if(region == MAP_FAILED)
 	{
-		perror("mmap");
+		perror("libfpprotect: mmap");
 		_exit(4);
 	}
 	/* TODO: is the mmap memory always initialized to 0? */
@@ -193,7 +193,7 @@ void *__fpp_protect(void *p)
 void __fpp_verify(void *p)
 {
 	if(!pointer_in_region_list(p)) {
-		fprintf(stderr, "__fpp_verify failed with p=%p, aborting!", p);
+		fprintf(stderr, "libfpprotect: __fpp_verify failed with p=%p, aborting!", p);
 		_exit(1);
 	}
 }
@@ -202,7 +202,7 @@ static void lock(struct jp_region *region)
 {
 	if (mprotect(region, region->size, PROT_READ|PROT_EXEC) == -1)
 	{
-		perror("mprotect");
+		perror("libfpprotect: mprotect");
 		_exit(1);
 	}
 }
@@ -211,7 +211,7 @@ static void unlock(struct jp_region *region)
 {
 	if (mprotect(region, region->size, PROT_READ|PROT_WRITE) == -1)
 	{
-		perror("mprotect");
+		perror("libfpprotect: mprotect");
 		_exit(1);
 	}
 }
@@ -269,7 +269,7 @@ void __fpp_del(void *p)
 
 #ifdef DEBUG
 	if (!region) {
-		fprintf(stderr, "__fpp_del failed with slot=%p, aborting!", slot);
+		fprintf(stderr, "libfpprotect: __fpp_del failed with slot=%p, aborting!", slot);
 		_exit(2);
 	}
 #endif
@@ -300,7 +300,7 @@ void *__fpp_cpy(void *p)
 
 #ifdef DEBUG
 	if (!region) {
-		fprintf(stderr, "__fpp_cpy failed with slot=%p, aborting!", slot);
+		fprintf(stderr, "libfpprotect: __fpp_cpy failed with slot=%p, aborting!", slot);
 		_exit(2);
 	}
 #endif
@@ -327,7 +327,7 @@ void __fpp_make_immutable(void *p)
 
 #ifdef DEBUG
 	if (!region) {
-		fprintf(stderr, "__fpp_make_immutable failed with slot=%p, aborting!", slot);
+		fprintf(stderr, "libfpprotect: __fpp_make_immutable failed with slot=%p, aborting!", slot);
 		_exit(2);
 	}
 #endif
