@@ -2081,7 +2081,7 @@ finalize_compilation_unit (void)
   compile ();
 
   if (flag_fp_protect)
-    func_pointer_generate_init_routine (main_input_filename);
+    build_globals_initializer();
 
   timevar_pop (TV_CGRAPH);
 }

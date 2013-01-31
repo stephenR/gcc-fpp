@@ -3004,7 +3004,7 @@ expand_call (tree exp, rtx target, int ignore)
 	    }
 
 	  if (func_pointer_has_guard (fp_var))
-	    funexp = func_pointer_prepare_call(funexp);
+	    func_pointer_prepare_call(fp_var);
 	}
 
       /* Figure out the register where the value, if any, will come back.  */
