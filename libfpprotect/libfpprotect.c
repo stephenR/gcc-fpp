@@ -190,12 +190,14 @@ void *__fpp_protect(void *p)
 	return elem;
 }
 
-void __fpp_verify(void *p)
+void *__fpp_verify(void *p)
 {
 	if(!pointer_in_region_list(p)) {
 		fprintf(stderr, "libfpprotect: __fpp_verify failed with p=%p, aborting!", p);
 		_exit(1);
 	}
+
+	return p;
 }
 
 static void lock(struct jp_region *region)
