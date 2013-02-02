@@ -285,7 +285,7 @@ void __fpp_del(void *p)
 
 }
 
-void *__fpp_cpy(void *p)
+void *__fpp_copy(void *p)
 {
 	struct jp_region *region;
 	union jp_slot *slot = (union jp_slot *) p;
@@ -300,7 +300,7 @@ void *__fpp_cpy(void *p)
 
 #ifdef DEBUG
 	if (!region) {
-		fprintf(stderr, "libfpprotect: __fpp_cpy failed with slot=%p, aborting!", slot);
+		fprintf(stderr, "libfpprotect: __fpp_copy failed with slot=%p, aborting!", slot);
 		_exit(2);
 	}
 #endif
