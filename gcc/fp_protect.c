@@ -1,5 +1,6 @@
 /* TODO: description and legal notice */
 
+/* TODO: remove unneeded header */
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -13,15 +14,17 @@
 #include "cgraph.h"
 #include "toplev.h"
 #include "tree-iterator.h"
+#include "tree-pass.h"
 
-//static void func_pointer_toggle_guard (rtx fp);
-static void func_pointer_copy(tree to, tree from);
-static void func_pointer_protect(tree to, tree from);
+//TODO debug
+#include "gimple-pretty-print.h"
 
 static tree fpp_protect_fndecl = NULL_TREE;
+static tree fpp_copy_fndecl = NULL_TREE;
 static tree fpp_verify_fndecl = NULL_TREE;
+static tree fpp_eq_fndecl = NULL_TREE;
 
-bool func_pointer_has_guard (tree var)
+static bool func_pointer_has_guard (tree var)
 {
   /* TODO for now all pointers are protected, this will change when
      compatibility features are implemented */
@@ -33,30 +36,11 @@ bool func_pointer_has_guard (tree var)
   return true;
 }
 
-void
-func_pointer_protect_assignment (tree to, tree from)
-{
-  if (!func_pointer_has_guard (to))
-    return;
-
-  if (func_pointer_has_guard (from) && func_pointer_has_guard (to)) { 
-    func_pointer_copy(to, from);
-    return;
-  }
-
-  func_pointer_protect(to, from);
-}
-
-//void func_pointer_add_guard (tree var)
-//{
-//  rtx fp = expand_normal (var);
-//  func_pointer_toggle_guard (fp);
-//}
-
 void build_globals_initializer() {
   tree body = NULL;
   tree stmt;
   struct varpool_node *node;
+  bool globals_found = false;
 
   FOR_EACH_VARIABLE(node) {
     tree global_var = node->symbol.decl;
@@ -66,40 +50,28 @@ void build_globals_initializer() {
     if (!func_pointer_has_guard (global_var))
       continue;
 
+    if (!DECL_INITIAL (global_var))
+      continue;
+
     stmt = build_call_expr (fpp_protect_fndecl, 1, global_var);
     stmt = build2 (MODIFY_EXPR, TREE_TYPE (global_var),
 		   global_var, stmt);
     append_to_statement_list (stmt, &body);
+    globals_found = true;
   }
-  cgraph_build_static_cdtor('I', body, DEFAULT_INIT_PRIORITY); //TODO: INIT_PRIORITY
+  if (globals_found)
+    cgraph_build_static_cdtor('I', body, DEFAULT_INIT_PRIORITY); //TODO: INIT_PRIORITY
 }
-  //tree arg_types = NULL_TREE;
-  //tree fpp_init_globals_type = void_type_node;
-  //tree fpp_init_globals_fndecl;
-
-  //arg_types = build_tree_list (NULL_TREE, ptr_type_node);
-  //arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
-
-  //fpp_init_globals_type = build_function_type (fpp_init_globals_type,
-  //    arg_types);
-  //fpp_init_globals_fndecl = build_fn_decl ("__fpp_init_globals",
-  //    fpp_init_globals_type);
-  //TREE_NOTHROW (fpp_init_globals_fndecl) = 1;
-  //DECL_ATTRIBUTES (fpp_init_globals_fndecl) =
-  //  tree_cons (get_identifier ("leaf"), NULL,
-  //      DECL_ATTRIBUTES (fpp_init_globals_fndecl));
-  //TREE_PUBLIC (fpp_init_globals_fndecl) = 0;
-  //DECL_PRESERVE_P (fpp_init_globals_fndecl) = 1;
-  //DECL_ARTIFICIAL (current_function_decl) = 1;
-  //TREE_USED (current_function_decl) = 1;
-  //DECL_STATIC_CONSTRUCTOR (current_function_decl) = 1;
-//}
 
 static void
 init_functions (void)
 {
   tree arg_types = NULL_TREE;
   tree fpp_protect_type = ptr_type_node;
+  tree fpp_copy_type = ptr_type_node;
+  tree fpp_eq_type = integer_type_node;
+  tree void_fn_type = build_function_type (void_type_node, build_tree_list (NULL_TREE, void_type_node));
+  tree fn_ptr_type = build_pointer_type (void_fn_type);
 
   if (fpp_protect_fndecl != NULL_TREE)
     return;
@@ -119,10 +91,26 @@ init_functions (void)
   TREE_PUBLIC (fpp_protect_fndecl) = 1;
   DECL_PRESERVE_P (fpp_protect_fndecl) = 1;
 
+  //__fpp_copy
+  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
+  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
+
+  fpp_copy_type = build_function_type (fpp_copy_type,
+      arg_types);
+  fpp_copy_fndecl = build_fn_decl ("__fpp_copy",
+      fpp_copy_type);
+  TREE_NOTHROW (fpp_copy_fndecl) = 1;
+  DECL_ATTRIBUTES (fpp_copy_fndecl) =
+    tree_cons (get_identifier ("leaf"), NULL,
+	DECL_ATTRIBUTES (fpp_copy_fndecl));
+  TREE_PUBLIC (fpp_copy_fndecl) = 1;
+  DECL_PRESERVE_P (fpp_copy_fndecl) = 1;
+
   //__fpp_verify
   arg_types = NULL_TREE;
-  //tree fpp_verify_type = ptr_type_node;
-  tree fpp_verify_type = void_type_node;
+  tree fpp_verify_type = fn_ptr_type;
+  //tree fpp_verify_type = void_type_node;
+  //tree fn_type = build_function_type (void_type_node, build_tree_list (NULL_TREE, void_type_node));
 
   arg_types = build_tree_list (NULL_TREE, ptr_type_node);
   arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
@@ -137,48 +125,125 @@ init_functions (void)
 	DECL_ATTRIBUTES (fpp_verify_fndecl));
   TREE_PUBLIC (fpp_verify_fndecl) = 1;
   DECL_PRESERVE_P (fpp_verify_fndecl) = 1;
+
+  //__fpp_eq
+  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
+  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, ptr_type_node));
+  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
+
+  fpp_eq_type = build_function_type (fpp_eq_type,
+      arg_types);
+  fpp_eq_fndecl = build_fn_decl ("__fpp_eq",
+      fpp_eq_type);
+  TREE_NOTHROW (fpp_eq_fndecl) = 1;
+  DECL_ATTRIBUTES (fpp_eq_fndecl) =
+    tree_cons (get_identifier ("leaf"), NULL,
+	DECL_ATTRIBUTES (fpp_eq_fndecl));
+  TREE_PUBLIC (fpp_eq_fndecl) = 1;
+  DECL_PRESERVE_P (fpp_eq_fndecl) = 1;
 }
 
-static void
-func_pointer_copy(tree to, tree from){
-}
-
-static void
-func_pointer_protect(tree to, tree from){
-  init_functions ();
-  tree fpp_protect_call = build_call_expr (fpp_protect_fndecl,
-                                            1, from);
-  rtx to_rtx = expand_normal (to);
-  rtx protected_to = expand_call (fpp_protect_call, to_rtx, /*ignore=*/ 0);
-  if(protected_to != to_rtx) {
-    emit_move_insn (to_rtx, protected_to);
-  }
-}
-
-void func_pointer_prepare_call (tree call_dst)
+static void fpp_transform_call_expr (tree *expr_p)
 {
-  //rtx call_reg;
+  //TODO: modify the statement list, so we do not need the return value of __fpp_verify
+  tree expr = *expr_p;
+  tree call_fn = CALL_EXPR_FN (expr);
 
+  if (TREE_CONSTANT (call_fn))
+    return;
+
+  TREE_OPERAND (expr, 1) = build_call_expr (fpp_verify_fndecl, 1, call_fn);
+}
+
+static void fpp_transform_compare_expr (tree expr)
+{
+  tree left = TREE_OPERAND (expr, 0);
+  tree right = TREE_OPERAND (expr, 1);
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (left)) && !FUNCTION_POINTER_TYPE_P (right))
+    return;
+
+  if (integer_zerop (left) || integer_zerop (right))
+    return;
+
+  gcc_assert (TREE_CODE (expr) == EQ_EXPR || TREE_CODE (expr) == NE_EXPR);
+
+  TREE_OPERAND (expr, 0) = build_call_expr (fpp_eq_fndecl, 2, left, right);
+  TREE_OPERAND (expr, 1) = integer_zero_node;
+}
+
+static void fpp_transform_assignment_expr (tree expr)
+{
+  tree lval = TREE_OPERAND (expr, 0);
+  tree rval = TREE_OPERAND (expr, 1);
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (lval)))
+    return;
+
+  if (TREE_CODE (rval) == CALL_EXPR)
+    return;
+
+  if (!func_pointer_has_guard (lval))
+    return;
+
+  if (func_pointer_has_guard (rval))
+    {
+      TREE_OPERAND (expr, 1) = build_call_expr (fpp_copy_fndecl, 1, rval);
+    }
+  else
+    {
+      TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
+    }
+}
+
+static tree
+fpp_transform_tree (tree *tp,
+		    int *walk_subtrees,
+		    void *data ATTRIBUTE_UNUSED)
+{
+  tree t = *tp;
+
+  //puts("fpp_transform_tree");
+
+  if (TYPE_P (t))
+    {
+      *walk_subtrees = 0;
+      return NULL;
+    }
+
+  switch (TREE_CODE (t))
+    {
+    case CALL_EXPR:
+      {
+	fpp_transform_call_expr (tp);
+	break;
+      }
+    case LT_EXPR:
+    case LE_EXPR:
+    case GT_EXPR:
+    case GE_EXPR:
+    case EQ_EXPR:
+    case NE_EXPR:
+      {
+	fpp_transform_compare_expr (t);
+	break;
+      }
+    case MODIFY_EXPR:
+    case INIT_EXPR:
+      {
+	fpp_transform_assignment_expr (t);
+	break;
+      }
+    default:
+      break;
+    }
+
+  return NULL;
+}
+
+void fpp_analyze_function (tree fndecl)
+{
   init_functions ();
-
-  //if (!REG_P (fp))
-  //  {
-  //    call_reg = gen_reg_rtx (ptr_mode);
-  //    emit_move_insn (call_reg, fp);
-  //  }
-  //else
-  //  {
-  //    call_reg = fp;
-  //  }
-
-  tree fpp_verify_call = build_call_expr (fpp_verify_fndecl,
-                                            1, call_dst);
-  expand_call (fpp_verify_call, NULL, /*ignore=*/ 0);
-  //rtx verified_to = expand_call (fpp_verify_call, call_reg, /*ignore=*/ 0);
-  //if(verified_to != call_reg) {
-  //  emit_move_insn (call_reg, verified_to);
-  //}
-
-  //return call_reg;
+  walk_tree_without_duplicates(&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
 }
 

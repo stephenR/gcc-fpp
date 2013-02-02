@@ -4861,10 +4861,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
       if (result)
 	preserve_temp_slots (result);
       pop_temp_slots ();
-      if (flag_fp_protect && FUNCTION_POINTER_TYPE_P ( TREE_TYPE (to)))
-        {
-            func_pointer_protect_assignment (to, from);
-        }
       return;
     }
 
@@ -5012,10 +5008,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
   preserve_temp_slots (result);
   pop_temp_slots ();
 
-  if (flag_fp_protect && FUNCTION_POINTER_TYPE_P ( TREE_TYPE (to)))
-    {
-        func_pointer_protect_assignment (to, from);
-    }
   return;
 }
 

@@ -48,6 +48,8 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks-def.h"	/* FIXME: for lhd_set_decl_assembler_name */
 #include "tree-pass.h"		/* FIXME: only for PROP_gimple_any */
 
+#include "fp_protect.h"
+
 enum gimplify_omp_var_data
 {
   GOVD_SEEN = 1,
@@ -8310,6 +8312,8 @@ gimplify_function_tree (tree fndecl)
   gimple bind;
 
   gcc_assert (!gimple_body (fndecl));
+
+  fpp_analyze_function (fndecl);
 
   if (DECL_STRUCT_FUNCTION (fndecl))
     push_cfun (DECL_STRUCT_FUNCTION (fndecl));
