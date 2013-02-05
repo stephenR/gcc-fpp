@@ -43,6 +43,9 @@ void build_globals_initializer() {
     if (!DECL_INITIAL (global_var))
       continue;
 
+    if (integer_zerop (DECL_INITIAL (global_var)))
+      continue;
+
     stmt = build_call_expr (fpp_protect_fndecl, 1, global_var);
     stmt = build2 (MODIFY_EXPR, TREE_TYPE (global_var),
 		   global_var, stmt);
