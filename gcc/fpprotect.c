@@ -237,3 +237,4 @@ void fpp_analyze_function (tree fndecl)
   walk_tree_without_duplicates(&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
 }
 
+#include "gt-fpprotect.h"
