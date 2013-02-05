@@ -170,14 +170,49 @@ static void fpp_transform_assignment_expr (tree expr)
     }
 }
 
+static void fpp_transform_var_decl (tree decl)
+{
+  tree initial = DECL_INITIAL (decl);
+
+  if (!initial)
+    return;
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (decl)))
+    return;
+
+  if (TREE_CODE (initial) == CALL_EXPR)
+    return;
+
+  if (!func_pointer_has_guard (decl))
+    return;
+
+  if (func_pointer_has_guard (initial))
+    {
+      DECL_INITIAL (decl) = build_call_expr (fpp_copy_fndecl, 1, initial);
+    }
+  else
+    {
+      DECL_INITIAL (decl) = build_call_expr (fpp_protect_fndecl, 1, initial);
+    }
+
+}
+static void fpp_transform_bind_expr (tree expr)
+{
+  tree decl;
+
+  for (decl = BIND_EXPR_VARS (expr); decl; decl = DECL_CHAIN (decl))
+    {
+      if (TREE_CODE (decl) == VAR_DECL)
+	fpp_transform_var_decl (decl);
+    }
+}
+
 static tree
 fpp_transform_tree (tree *tp,
 		    int *walk_subtrees,
 		    void *data ATTRIBUTE_UNUSED)
 {
   tree t = *tp;
-
-  //puts("fpp_transform_tree");
 
   if (TYPE_P (t))
     {
@@ -208,6 +243,11 @@ fpp_transform_tree (tree *tp,
 	fpp_transform_assignment_expr (t);
 	break;
       }
+    case BIND_EXPR:
+      {
+	fpp_transform_bind_expr (t);
+	break;
+      }
     default:
       break;
     }
@@ -218,7 +258,8 @@ fpp_transform_tree (tree *tp,
 void fpp_analyze_function (tree fndecl)
 {
   init_functions ();
-  walk_tree_without_duplicates(&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
+
+  walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
 }
 
 #include "gt-fpprotect.h"
