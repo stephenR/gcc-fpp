@@ -8313,7 +8313,8 @@ gimplify_function_tree (tree fndecl)
 
   gcc_assert (!gimple_body (fndecl));
 
-  fpp_analyze_function (fndecl);
+  if (flag_fp_protect)
+    fpp_analyze_function (fndecl);
 
   if (DECL_STRUCT_FUNCTION (fndecl))
     push_cfun (DECL_STRUCT_FUNCTION (fndecl));
