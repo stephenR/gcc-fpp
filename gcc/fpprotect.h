@@ -1,7 +1,7 @@
 /* TODO description and legal notice */
 
-#ifndef GCC_FP_PROTECT_H
-#define GCC_FP_PROTECT_H
+#ifndef GCC_FPPROTECT_H
+#define GCC_FPPROTECT_H
 
 #include "tree.h"
 
@@ -10,5 +10,5 @@ extern void build_globals_initializer();
 
 extern void fpp_analyze_function (tree fndecl);
 
-#endif /* GCC_FP_PROTECT_H */
+#endif /* GCC_FPPROTECT_H */
 

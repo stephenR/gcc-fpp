@@ -1209,7 +1209,7 @@ OBJS = \
 	final.o \
 	fixed-value.o \
 	fold-const.o \
-	fp_protect.o \
+	fpprotect.o \
 	function.o \
 	fwprop.o \
 	gcse.o \

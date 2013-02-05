@@ -54,7 +54,6 @@ along with GCC; see the file COPYING3.  If not see
 #include "ssaexpand.h"
 #include "target-globals.h"
 #include "params.h"
-#include "fp_protect.h"
 
 /* Decide whether a function's arguments should be processed
    from first to last or from last to first.
@@ -4632,12 +4631,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
       else
 	store_bit_field (mem, GET_MODE_BITSIZE (mode),
 			 0, 0, 0, mode, reg);
-
-      if (flag_fp_protect)
-      {
-	/* TODO: temporary assertion, handle function pointers here too? */
-	gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
-      }
       return;
     }
 
@@ -4921,11 +4914,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
 	}
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
-      if(flag_fp_protect)
-        {
-          /* TODO: temporary assertion, handle function pointers here too? */
-          gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
-        }
       return;
     }
 
@@ -4959,11 +4947,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
 
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
-      if(flag_fp_protect)
-        {
-          /* TODO: temporary assertion, handle function pointers here too? */
-          gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
-        }
       return;
     }
 
@@ -4993,11 +4976,6 @@ expand_assignment (tree to, tree from, bool nontemporal)
 
       preserve_temp_slots (to_rtx);
       pop_temp_slots ();
-      if(flag_fp_protect)
-        {
-          /* TODO: temporary assertion, handle function pointers here too? */
-          gcc_assert (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (to)));
-        }
       return;
     }
 

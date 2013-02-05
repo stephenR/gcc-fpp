@@ -194,7 +194,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "lto-streamer.h"
 #include "except.h"
 #include "regset.h"     /* FIXME: For reg_obstack.  */
-#include "fp_protect.h"
+#include "fpprotect.h"
 
 /* Queue of cgraph nodes scheduled to be added into cgraph.  This is a
    secondary queue used during optimization to accommodate passes that

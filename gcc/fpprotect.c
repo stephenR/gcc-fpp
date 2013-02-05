@@ -4,25 +4,15 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
-#include "tm.h"
-#include "fp_protect.h"
-#include "target.h"
-#include "rtl.h"
-#include "expr.h"
-#include "optabs.h"
-#include "gimple.h"
+#include "tree.h"
+#include "ggc.h"
 #include "cgraph.h"
-#include "toplev.h"
 #include "tree-iterator.h"
-#include "tree-pass.h"
 
-//TODO debug
-#include "gimple-pretty-print.h"
-
-static tree fpp_protect_fndecl = NULL_TREE;
-static tree fpp_copy_fndecl = NULL_TREE;
-static tree fpp_verify_fndecl = NULL_TREE;
-static tree fpp_eq_fndecl = NULL_TREE;
+static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
+static GTY(()) tree fpp_copy_fndecl = NULL_TREE;
+static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
+static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
 
 static bool func_pointer_has_guard (tree var)
 {
