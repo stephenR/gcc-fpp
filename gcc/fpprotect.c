@@ -114,14 +114,16 @@ init_functions (void)
 
 static void fpp_transform_call_expr (tree *expr_p)
 {
-  //TODO: modify the statement list, so we do not need the return value of __fpp_verify
   tree expr = *expr_p;
   tree call_fn = CALL_EXPR_FN (expr);
+  tree verify_call;
 
   if (TREE_CONSTANT (call_fn))
     return;
 
-  TREE_OPERAND (expr, 1) = build_call_expr (fpp_verify_fndecl, 1, call_fn);
+  verify_call = build_call_expr (fpp_verify_fndecl, 1, call_fn);
+
+  *expr_p = build2 (COMPOUND_EXPR, TREE_TYPE (expr), verify_call, expr);
 }
 
 static void fpp_transform_compare_expr (tree expr)
