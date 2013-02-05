@@ -53,84 +53,63 @@ void build_globals_initializer() {
     cgraph_build_static_cdtor('I', body, DEFAULT_INIT_PRIORITY); //TODO: INIT_PRIORITY
 }
 
+static void set_fndecl_attributes (tree fndecl)
+{
+  TREE_NOTHROW (fndecl) = 1;
+  DECL_ATTRIBUTES (fndecl) =
+    tree_cons (get_identifier ("leaf"), NULL,
+	DECL_ATTRIBUTES (fndecl));
+  TREE_PUBLIC (fndecl) = 1;
+  DECL_PRESERVE_P (fndecl) = 1;
+}
+
 static void
 init_functions (void)
 {
-  tree arg_types = NULL_TREE;
   tree fpp_protect_type = ptr_type_node;
   tree fpp_copy_type = ptr_type_node;
+  tree fpp_verify_type = void_type_node;
   tree fpp_eq_type = integer_type_node;
-  tree void_fn_type = build_function_type (void_type_node, build_tree_list (NULL_TREE, void_type_node));
-  tree fn_ptr_type = build_pointer_type (void_fn_type);
+  tree void_pointer_args;
+  tree compare_arg_types;
 
   if (fpp_protect_fndecl != NULL_TREE)
     return;
 
-  //__fpp_protect
-  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
-  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
+  void_pointer_args = build_tree_list (NULL_TREE, ptr_type_node);
+  void_pointer_args = chainon (void_pointer_args, build_tree_list (NULL_TREE, void_type_node));
 
+  compare_arg_types = build_tree_list (NULL_TREE, ptr_type_node);
+  compare_arg_types = chainon (compare_arg_types, build_tree_list (NULL_TREE, ptr_type_node));
+  compare_arg_types = chainon (compare_arg_types, build_tree_list (NULL_TREE, void_type_node));
+
+  //__fpp_protect
   fpp_protect_type = build_function_type (fpp_protect_type,
-      arg_types);
+      void_pointer_args);
   fpp_protect_fndecl = build_fn_decl ("__fpp_protect",
       fpp_protect_type);
-  TREE_NOTHROW (fpp_protect_fndecl) = 1;
-  DECL_ATTRIBUTES (fpp_protect_fndecl) =
-    tree_cons (get_identifier ("leaf"), NULL,
-	DECL_ATTRIBUTES (fpp_protect_fndecl));
-  TREE_PUBLIC (fpp_protect_fndecl) = 1;
-  DECL_PRESERVE_P (fpp_protect_fndecl) = 1;
+  set_fndecl_attributes (fpp_protect_fndecl);
 
   //__fpp_copy
-  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
-  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
-
   fpp_copy_type = build_function_type (fpp_copy_type,
-      arg_types);
+      void_pointer_args);
   fpp_copy_fndecl = build_fn_decl ("__fpp_copy",
       fpp_copy_type);
-  TREE_NOTHROW (fpp_copy_fndecl) = 1;
-  DECL_ATTRIBUTES (fpp_copy_fndecl) =
-    tree_cons (get_identifier ("leaf"), NULL,
-	DECL_ATTRIBUTES (fpp_copy_fndecl));
-  TREE_PUBLIC (fpp_copy_fndecl) = 1;
-  DECL_PRESERVE_P (fpp_copy_fndecl) = 1;
+  set_fndecl_attributes (fpp_copy_fndecl);
 
   //__fpp_verify
-  arg_types = NULL_TREE;
-  tree fpp_verify_type = fn_ptr_type;
-  //tree fpp_verify_type = void_type_node;
-  //tree fn_type = build_function_type (void_type_node, build_tree_list (NULL_TREE, void_type_node));
-
-  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
-  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
-
   fpp_verify_type = build_function_type (fpp_verify_type,
-      arg_types);
+      void_pointer_args);
   fpp_verify_fndecl = build_fn_decl ("__fpp_verify",
       fpp_verify_type);
-  TREE_NOTHROW (fpp_verify_fndecl) = 1;
-  DECL_ATTRIBUTES (fpp_verify_fndecl) =
-    tree_cons (get_identifier ("leaf"), NULL,
-	DECL_ATTRIBUTES (fpp_verify_fndecl));
-  TREE_PUBLIC (fpp_verify_fndecl) = 1;
-  DECL_PRESERVE_P (fpp_verify_fndecl) = 1;
+  set_fndecl_attributes (fpp_verify_fndecl);
 
   //__fpp_eq
-  arg_types = build_tree_list (NULL_TREE, ptr_type_node);
-  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, ptr_type_node));
-  arg_types = chainon (arg_types, build_tree_list (NULL_TREE, void_type_node));
-
   fpp_eq_type = build_function_type (fpp_eq_type,
-      arg_types);
+      compare_arg_types);
   fpp_eq_fndecl = build_fn_decl ("__fpp_eq",
       fpp_eq_type);
-  TREE_NOTHROW (fpp_eq_fndecl) = 1;
-  DECL_ATTRIBUTES (fpp_eq_fndecl) =
-    tree_cons (get_identifier ("leaf"), NULL,
-	DECL_ATTRIBUTES (fpp_eq_fndecl));
-  TREE_PUBLIC (fpp_eq_fndecl) = 1;
-  DECL_PRESERVE_P (fpp_eq_fndecl) = 1;
+  set_fndecl_attributes (fpp_eq_fndecl);
 }
 
 static void fpp_transform_call_expr (tree *expr_p)
