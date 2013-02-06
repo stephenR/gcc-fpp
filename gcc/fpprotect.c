@@ -8,19 +8,42 @@
 #include "ggc.h"
 #include "cgraph.h"
 #include "tree-iterator.h"
+#include "plugin.h"
 
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_copy_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
 
+static GTY(()) struct attribute_spec disable_attribute_spec =
+  {  "fpprotect_disable",
+     0,
+     0,
+     true,
+     false,
+     false,
+     NULL,
+     false
+  };
+
+
+static bool fpprotect_disable_attribute_p (tree node)
+{
+  tree attributes;
+  for (attributes = DECL_ATTRIBUTES (node); attributes; attributes = TREE_CHAIN (attributes))
+    {
+      if (is_attribute_p (disable_attribute_spec.name, TREE_PURPOSE (attributes)))
+	return true;
+    }
+  return false;
+}
+
 static bool func_pointer_has_guard (tree var)
 {
-  /* TODO for now all pointers are protected, this will change when
-     compatibility features are implemented */
-  //if (CONSTANT_CLASS_P (var))
-  //  return false;
   if (TREE_CONSTANT (var))
+    return false;
+
+  if (fpprotect_disable_attribute_p (var))
     return false;
 
   return true;
@@ -121,7 +144,7 @@ static void fpp_transform_call_expr (tree *expr_p)
   tree call_fn = CALL_EXPR_FN (expr);
   tree verify_call;
 
-  if (TREE_CONSTANT (call_fn))
+  if (!func_pointer_has_guard (call_fn))
     return;
 
   verify_call = build_call_expr (fpp_verify_fndecl, 1, call_fn);
@@ -260,6 +283,10 @@ void fpp_analyze_function (tree fndecl)
   init_functions ();
 
   walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
+}
+
+void fpp_register_disable_attribute () {
+  register_attribute (&disable_attribute_spec);
 }
 
 #include "gt-fpprotect.h"

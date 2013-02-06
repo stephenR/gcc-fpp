@@ -33,6 +33,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "langhooks.h"
 #include "hashtab.h"
 #include "plugin.h"
+#include "fpprotect.h"
 
 /* Table of the tables of attributes (common, language, format, machine)
    searched.  */
@@ -264,6 +265,8 @@ init_attributes (void)
 
   invoke_plugin_callbacks (PLUGIN_ATTRIBUTES, NULL);
   attributes_initialized = true;
+
+  fpp_register_disable_attribute ();
 }
 
 /* Insert a single ATTR into the attribute table.  */
