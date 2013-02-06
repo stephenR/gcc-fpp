@@ -6,7 +6,7 @@
 #include "tree.h"
 
 /* TODO descriptions */
-extern void build_globals_initializer();
+extern void fpp_build_globals_initializer();
 
 extern void fpp_analyze_function (tree fndecl);
 

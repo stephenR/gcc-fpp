@@ -2081,7 +2081,7 @@ finalize_compilation_unit (void)
   compile ();
 
   if (flag_fp_protect)
-    build_globals_initializer();
+    fpp_build_globals_initializer();
 
   timevar_pop (TV_CGRAPH);
 }

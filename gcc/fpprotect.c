@@ -49,7 +49,7 @@ static bool func_pointer_has_guard (tree var)
   return true;
 }
 
-void build_globals_initializer() {
+void fpp_build_globals_initializer() {
   tree body = NULL;
   tree stmt;
   struct varpool_node *node;
