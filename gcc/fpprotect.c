@@ -30,6 +30,10 @@ static GTY(()) struct attribute_spec disable_attribute_spec =
 static bool fpprotect_disable_attribute_p (tree node)
 {
   tree attributes;
+
+  if (TREE_CODE (node) != VAR_DECL)
+    return false;
+
   for (attributes = DECL_ATTRIBUTES (node); attributes; attributes = TREE_CHAIN (attributes))
     {
       if (is_attribute_p (disable_attribute_spec.name, TREE_PURPOSE (attributes)))
