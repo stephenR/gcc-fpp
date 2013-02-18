@@ -254,7 +254,6 @@ static void fpp_transform_assignment_expr (tree expr)
 
   if (!func_pointer_has_guard (rval))
       TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
-    }
 }
 
 static void fpp_transform_var_decl (tree decl)
