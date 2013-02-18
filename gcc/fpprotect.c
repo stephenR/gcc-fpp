@@ -198,6 +198,9 @@ static tree fpp_transform_call_parm (tree parm)
   if (func_pointer_has_guard (parm))
     return parm;
 
+  if (integer_zerop (parm))
+    return parm;
+
   return build_call_expr (fpp_protect_fndecl, 1, parm);
 }
 
@@ -255,6 +258,9 @@ static void fpp_transform_assignment_expr (tree expr)
   if (!func_pointer_has_guard (lval))
     return;
 
+  if (integer_zerop (rval))
+    return;
+
   if (func_pointer_has_guard (rval))
     {
       TREE_OPERAND (expr, 1) = build_call_expr (fpp_copy_fndecl, 1, rval);
@@ -279,6 +285,9 @@ static void fpp_transform_var_decl (tree decl)
     return;
 
   if (!func_pointer_has_guard (decl))
+    return;
+
+  if (integer_zerop (initial))
     return;
 
   if (func_pointer_has_guard (initial))
