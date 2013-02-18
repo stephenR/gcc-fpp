@@ -102,6 +102,11 @@ static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((u
 	return 0;
 }
 
+static int initialized()
+{
+	return (region_list != NULL);
+}
+
 static void *region_end(struct jp_region *region)
 {
 	return (char *) region + region->size;
@@ -145,6 +150,9 @@ void *__fpp_protect(void *p)
 {
 	struct jp_element *elem = NULL;
 	struct jp_region *region = *region_list_ptr;
+
+	if (!initialized())
+		return p;
 
 	/* ignore NULL pointer */
 	if (!p)
@@ -192,6 +200,9 @@ void *__fpp_protect(void *p)
 
 void __fpp_verify(void *p)
 {
+	if (!initialized())
+		return;
+
 	if(!pointer_in_region_list(p)) {
 		fprintf(stderr, "libfpprotect: __fpp_verify failed with p=%p, aborting!", p);
 		_exit(1);
