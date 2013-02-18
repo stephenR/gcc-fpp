@@ -200,6 +200,16 @@ void __fpp_verify(void *p)
 	return;
 }
 
+void *__fpp_get_addr(void *p)
+{
+	const struct jp_element *elem = p;
+
+	if (!pointer_in_region_list(p))
+		return p;
+
+	return elem->addr;
+}
+
 static void lock(struct jp_region *region)
 {
 	if (mprotect(region, region->size, PROT_READ|PROT_EXEC) == -1)
