@@ -53,34 +53,73 @@ static bool func_pointer_has_guard (tree var)
   return true;
 }
 
+static bool build_initializer_for_var (tree global_var, tree initial, tree *body);
+
+static bool build_initializer_for_constructor (tree var, tree constructor, tree *body)
+{
+  unsigned int ix;
+  VEC(constructor_elt, gc) *v = CONSTRUCTOR_ELTS (constructor);
+  bool globals_found = false;
+  tree index, val;
+
+  FOR_EACH_CONSTRUCTOR_ELT (v, ix, index, val)
+    {
+      tree ref;
+
+      if (RECORD_OR_UNION_TYPE_P (TREE_TYPE (var)))
+	ref = build3 (COMPONENT_REF, TREE_TYPE (index), var, index, NULL_TREE);
+      else
+	ref = build4 (ARRAY_REF, TREE_TYPE (TREE_TYPE (var)), var, index, NULL_TREE, NULL_TREE);
+
+      globals_found |= build_initializer_for_var (ref, val, body);
+    }
+
+  return globals_found;
+}
+
+static bool build_initializer_for_var (tree global_var, tree initial, tree *body)
+{
+  tree stmt;
+
+  if (!initial)
+    return false;
+
+  if (TREE_READONLY (global_var))
+    return false;
+
+  if (TREE_CODE (initial) == CONSTRUCTOR)
+    {
+      return build_initializer_for_constructor (global_var, initial, body);
+    }
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (global_var)))
+    return false;
+
+  if (!func_pointer_has_guard (global_var))
+    return false;
+
+  if (integer_zerop (initial))
+    return false;
+
+  stmt = build_call_expr (fpp_protect_fndecl, 1, global_var);
+  stmt = build2 (MODIFY_EXPR, TREE_TYPE (global_var),
+		 global_var, stmt);
+  append_to_statement_list (stmt, body);
+
+  return true;
+}
+
 void fpp_build_globals_initializer() {
   tree body = NULL;
-  tree stmt;
   struct varpool_node *node;
   bool globals_found = false;
 
   FOR_EACH_VARIABLE(node) {
-    tree global_var = node->symbol.decl;
-    if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (global_var)))
-      continue;
-
-    if (!func_pointer_has_guard (global_var))
-      continue;
-
-    if (!DECL_INITIAL (global_var))
-      continue;
-
-    if (integer_zerop (DECL_INITIAL (global_var)))
-      continue;
-
-    stmt = build_call_expr (fpp_protect_fndecl, 1, global_var);
-    stmt = build2 (MODIFY_EXPR, TREE_TYPE (global_var),
-		   global_var, stmt);
-    append_to_statement_list (stmt, &body);
-    globals_found = true;
+    globals_found |= build_initializer_for_var (node->symbol.decl, DECL_INITIAL (node->symbol.decl), &body);
   }
+
   if (globals_found)
-    cgraph_build_static_cdtor('I', body, DEFAULT_INIT_PRIORITY); //TODO: INIT_PRIORITY
+    cgraph_build_static_cdtor('I', body, MAX_RESERVED_INIT_PRIORITY);
 }
 
 static void set_fndecl_attributes (tree fndecl)
