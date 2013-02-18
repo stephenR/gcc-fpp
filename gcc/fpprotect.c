@@ -44,6 +44,9 @@ static bool func_pointer_has_guard (tree var)
   if (TREE_CONSTANT (var))
     return false;
 
+  if (TREE_READONLY (var))
+    return false;
+
   if (fpprotect_disable_attribute_p (var))
     return false;
 
