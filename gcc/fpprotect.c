@@ -311,6 +311,7 @@ fpp_transform_tree (tree *tp,
     case CALL_EXPR:
       {
 	fpp_transform_call_expr (tp);
+	*walk_subtrees = 0; //TODO: what about nested function calls?
 	break;
       }
     case LT_EXPR:
