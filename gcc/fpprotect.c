@@ -11,7 +11,6 @@
 #include "plugin.h"
 
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
-static GTY(()) tree fpp_copy_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
 
@@ -136,7 +135,6 @@ static void
 init_functions (void)
 {
   tree fpp_protect_type = ptr_type_node;
-  tree fpp_copy_type = ptr_type_node;
   tree fpp_verify_type = void_type_node;
   tree fpp_eq_type = integer_type_node;
   tree void_pointer_args;
@@ -158,13 +156,6 @@ init_functions (void)
   fpp_protect_fndecl = build_fn_decl ("__fpp_protect",
       fpp_protect_type);
   set_fndecl_attributes (fpp_protect_fndecl);
-
-  //__fpp_copy
-  fpp_copy_type = build_function_type (fpp_copy_type,
-      void_pointer_args);
-  fpp_copy_fndecl = build_fn_decl ("__fpp_copy",
-      fpp_copy_type);
-  set_fndecl_attributes (fpp_copy_fndecl);
 
   //__fpp_verify
   fpp_verify_type = build_function_type (fpp_verify_type,
@@ -261,12 +252,7 @@ static void fpp_transform_assignment_expr (tree expr)
   if (integer_zerop (rval))
     return;
 
-  if (func_pointer_has_guard (rval))
-    {
-      TREE_OPERAND (expr, 1) = build_call_expr (fpp_copy_fndecl, 1, rval);
-    }
-  else
-    {
+  if (!func_pointer_has_guard (rval))
       TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
     }
 }
@@ -290,11 +276,7 @@ static void fpp_transform_var_decl (tree decl)
   if (integer_zerop (initial))
     return;
 
-  if (func_pointer_has_guard (initial))
-    {
-      DECL_INITIAL (decl) = build_call_expr (fpp_copy_fndecl, 1, initial);
-    }
-  else
+  if (!func_pointer_has_guard (initial))
     {
       DECL_INITIAL (decl) = build_call_expr (fpp_protect_fndecl, 1, initial);
     }
