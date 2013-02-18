@@ -264,7 +264,7 @@ static void fpp_transform_var_decl (tree decl)
   if (!initial)
     return;
 
-  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (decl)))
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (initial)))
     return;
 
   if (TREE_CODE (initial) == CALL_EXPR)
