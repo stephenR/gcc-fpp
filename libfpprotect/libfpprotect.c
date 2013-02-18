@@ -41,13 +41,11 @@ struct jp_region {
 	union jp_slot slots[];
 };
 
-static struct jp_region * const region_list = NULL;
-static struct jp_region * const * const volatile region_list_ptr = &region_list;
+static struct jp_region * const volatile region_list __attribute__((section(".rodata"))) = NULL;
 
 #define INITIAL_NUM_ELEMENTS 256
 static const size_t mmap_size = sizeof(struct jp_region) + INITIAL_NUM_ELEMENTS*sizeof(union jp_slot);
 
-static int dl_iterate_phdr_callback (struct dl_phdr_info *info, size_t x, void *data);
 static struct jp_region *create_region();
 static void lock(struct jp_region *region);
 static void unlock(struct jp_region *region);
@@ -56,50 +54,27 @@ static int try_resize(struct jp_region *region);
 static void fpprotect_init() __attribute__ ((constructor));
 static void fpprotect_init()
 {
-	if(!dl_iterate_phdr (dl_iterate_phdr_callback, NULL)) {
-		fprintf(stderr, "libfpprotect: fpprotect_init failed, aborting!");
+	if (region_list)
+		return;
+
+	long page_size = sysconf(_SC_PAGESIZE);
+
+	void *page_addr = (void*) ((long) &region_list & ~(page_size - 1));
+
+	if (mprotect(page_addr, page_size, PROT_READ|PROT_WRITE|PROT_EXEC) == -1)
+	{
+		perror("libfpprotect: mprotect");
 		_exit(1);
 	}
-}
 
-static int dl_iterate_phdr_callback (struct dl_phdr_info *info, __attribute__((unused)) size_t size, __attribute__((unused)) void *data)
-{
-	int j;
+	*((struct jp_region **)&region_list) = create_region();
 
-	for (j = 0; j < info->dlpi_phnum; j++)
+	if (mprotect(page_addr, page_size, PROT_READ|PROT_EXEC) == -1)
 	{
-		ElfW(Addr) relocated_start_addr =
-			info->dlpi_addr + info->dlpi_phdr[j].p_vaddr;
-		ElfW(Addr) unrelocated_start_addr = info->dlpi_phdr[j].p_vaddr;
-		ElfW(Addr) start_addr = relocated_start_addr + unrelocated_start_addr;
-		ElfW(Word) size_in_memory = info->dlpi_phdr[j].p_memsz;
-
-		if ((ElfW(Addr)) &region_list < start_addr
-				|| (ElfW(Addr)) &region_list >= start_addr + size_in_memory)
-			continue;
-
-		ElfW(Word) saved_flags = info->dlpi_phdr[j].p_flags;
-
-		ElfW(Addr) mp_low = relocated_start_addr & ~(sysconf(_SC_PAGESIZE) - 1);
-		size_t mp_size = relocated_start_addr + size_in_memory - mp_low - 1;
-
-		if (mprotect((void *)mp_low, mp_size, PROT_READ|PROT_WRITE|PROT_EXEC) == -1)
-		{
-			perror("libfpprotect: mprotect");
-			_exit(1);
-		}
-
-		*((struct jp_region **)&region_list) = create_region();
-
-		if (mprotect((void *)mp_low, mp_size, saved_flags) == -1)
-		{
-			perror("libfpprotect: mprotect");
-			_exit(3);
-		}
-
-		return 1;
+		perror("libfpprotect: mprotect");
+		_exit(3);
 	}
-	return 0;
+
 }
 
 static int initialized()
@@ -119,7 +94,7 @@ static int pointer_in_region(const void *p, struct jp_region *region)
 
 static int pointer_in_region_list(const void *p)
 {
-	struct jp_region *region = *region_list_ptr;
+	struct jp_region *region = region_list;
 
 	while (region) {
 		if(pointer_in_region(p, region)) {
@@ -149,7 +124,7 @@ static struct jp_region *create_region()
 void *__fpp_protect(void *p)
 {
 	struct jp_element *elem = NULL;
-	struct jp_region *region = *region_list_ptr;
+	struct jp_region *region = region_list;
 
 	if (!initialized())
 		return p;
@@ -172,7 +147,7 @@ void *__fpp_protect(void *p)
 		if (region->free_list) {
 			unlock(region);
 			elem = &region->free_list->filled;
-			region->free_list = (*region_list_ptr)->free_list->empty.next;
+			region->free_list = region->free_list->empty.next;
 			break;
 		} 
 
@@ -268,7 +243,7 @@ int __fpp_eq(const void *p, const void *q)
 }
 
 static struct jp_region *get_region_for(union jp_slot *slot) {
-	struct jp_region *region = *region_list_ptr;
+	struct jp_region *region = region_list;
 	while (region) {
 		if (pointer_in_region(slot, region))
 			return region;
