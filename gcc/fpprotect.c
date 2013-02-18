@@ -181,11 +181,40 @@ init_functions (void)
   set_fndecl_attributes (fpp_eq_fndecl);
 }
 
+static void fpp_transform_call_expr (tree *expr_p);
+
+static tree fpp_transform_call_parm (tree parm)
+{
+  if (TREE_CODE (parm) == CALL_EXPR)
+    {
+      fpp_transform_call_expr (&parm);
+
+      return parm;
+    }
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (parm)))
+    return parm;
+
+  if (func_pointer_has_guard (parm))
+    return parm;
+
+  return build_call_expr (fpp_protect_fndecl, 1, parm);
+}
+
 static void fpp_transform_call_expr (tree *expr_p)
 {
   tree expr = *expr_p;
   tree call_fn = CALL_EXPR_FN (expr);
   tree verify_call;
+  tree arg;
+  call_expr_arg_iterator iter;
+
+  FOR_EACH_CALL_EXPR_ARG (arg, iter, expr)
+    {
+      tree new_arg;
+      new_arg = fpp_transform_call_parm (arg);
+      CALL_EXPR_ARG (expr, iter.i-1) = new_arg;
+    }
 
   if (!func_pointer_has_guard (call_fn))
     return;
