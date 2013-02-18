@@ -51,8 +51,8 @@ static void lock(struct jp_region *region);
 static void unlock(struct jp_region *region);
 static int try_resize(struct jp_region *region);
 
-static void fpprotect_init() __attribute__ ((constructor));
-static void fpprotect_init()
+void __fpp_init() __attribute__ ((constructor));
+void __fpp_init()
 {
 	if (region_list)
 		return;
