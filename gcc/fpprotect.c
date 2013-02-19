@@ -9,6 +9,7 @@
 #include "cgraph.h"
 #include "tree-iterator.h"
 #include "plugin.h"
+#include "pointer-set.h"
 
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
@@ -176,49 +177,27 @@ init_functions (void)
   set_fndecl_attributes (fpp_del_fndecl);
 }
 
-static void fpp_transform_call_expr (tree *expr_p);
-
-static tree fpp_transform_call_parm (tree parm)
-{
-  if (TREE_CODE (parm) == CALL_EXPR)
-    {
-      fpp_transform_call_expr (&parm);
-
-      return parm;
-    }
-
-  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (parm)))
-    return parm;
-
-  if (func_pointer_has_guard (parm))
-    return parm;
-
-  if (integer_zerop (parm))
-    return parm;
-
-  return build_call_expr (fpp_protect_fndecl, 1, parm);
-}
-
 static void fpp_transform_call_expr (tree *expr_p)
 {
   tree expr = *expr_p;
   tree call_fn = CALL_EXPR_FN (expr);
   tree verify_call;
-  tree arg;
-  call_expr_arg_iterator iter;
-
-  FOR_EACH_CALL_EXPR_ARG (arg, iter, expr)
-    {
-      tree new_arg;
-      new_arg = fpp_transform_call_parm (arg);
-      CALL_EXPR_ARG (expr, iter.i-1) = new_arg;
-    }
+  tree temp;
 
   if (!func_pointer_has_guard (call_fn))
     return;
 
-  verify_call = build_call_expr (fpp_verify_fndecl, 1, call_fn);
+  temp = build_decl (EXPR_LOCATION (expr),
+			  VAR_DECL, NULL_TREE, TREE_TYPE (call_fn));
+  DECL_ARTIFICIAL (temp) = 1;
+  DECL_IGNORED_P (temp) = 1;
+  DECL_CONTEXT (temp) = current_function_decl;
+  layout_decl (temp, 0);
+  temp = build4 (TARGET_EXPR, TREE_TYPE (call_fn), temp, call_fn, NULL_TREE, NULL_TREE);
+  TREE_SIDE_EFFECTS (temp) = 1;
 
+  verify_call = build_call_expr (fpp_verify_fndecl, 1, temp);
+  CALL_EXPR_FN (expr) = temp;
   *expr_p = build2 (COMPOUND_EXPR, TREE_TYPE (expr), verify_call, expr);
 }
 
@@ -319,25 +298,202 @@ static void fpp_transform_bind_expr (tree expr)
     }
 }
 
-static tree
-fpp_transform_tree (tree *tp,
-		    int *walk_subtrees,
-		    void *data ATTRIBUTE_UNUSED)
-{
-  tree t = *tp;
+static void fpp_walk_tree (tree *tp, struct pointer_set_t *pset);
 
-  if (TYPE_P (t))
+void fpp_analyze_function (tree fndecl)
+{
+  struct pointer_set_t *pset;
+  init_functions ();
+
+  pset = pointer_set_create ();
+  fpp_walk_tree (&DECL_SAVED_TREE (fndecl), pset);
+  pointer_set_destroy (pset);
+  //walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
+}
+
+static void
+fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
+{
+  enum tree_code code;
+
+  if (!*tp)
+    return;
+
+  /* Don't walk the same tree twice, if the user has requested
+     that we avoid doing so.  */
+  if (pset && pointer_set_insert (pset, *tp))
+    return;
+
+  code = TREE_CODE (*tp);
+
+  switch (code)
     {
-      *walk_subtrees = 0;
-      return NULL;
+    case ERROR_MARK:
+    case IDENTIFIER_NODE:
+    case INTEGER_CST:
+    case REAL_CST:
+    case FIXED_CST:
+    case VECTOR_CST:
+    case STRING_CST:
+    case BLOCK:
+    case PLACEHOLDER_EXPR:
+    case SSA_NAME:
+    case FIELD_DECL:
+    case RESULT_DECL:
+      /* None of these have subtrees other than those already walked
+	 above.  */
+      break;
+
+    case TREE_LIST:
+      fpp_walk_tree (&TREE_VALUE (*tp), pset);
+      fpp_walk_tree (&TREE_CHAIN (*tp), pset);
+      break;
+
+    case TREE_VEC:
+      {
+	int len = TREE_VEC_LENGTH (*tp);
+
+	if (len == 0)
+	  break;
+
+	while (len--)
+	  fpp_walk_tree (&TREE_VEC_ELT (*tp, len), pset);
+
+      }
+      break;
+
+    case CONSTRUCTOR:
+      {
+	unsigned HOST_WIDE_INT idx;
+	constructor_elt *ce;
+
+	for (idx = 0;
+	     VEC_iterate(constructor_elt, CONSTRUCTOR_ELTS (*tp), idx, ce);
+	     idx++)
+	  fpp_walk_tree (&ce->value, pset);
+      }
+      break;
+
+    case SAVE_EXPR:
+      fpp_walk_tree (&TREE_OPERAND (*tp, 0), pset);
+      break;
+
+    case BIND_EXPR:
+      {
+	tree decl;
+	for (decl = BIND_EXPR_VARS (*tp); decl; decl = DECL_CHAIN (decl))
+	  {
+	    /* Walk the DECL_INITIAL and DECL_SIZE.  We don't want to walk
+	       into declarations that are just mentioned, rather than
+	       declared; they don't really belong to this part of the tree.
+	       And, we can see cycles: the initializer for a declaration
+	       can refer to the declaration itself.  */
+	    fpp_walk_tree (&DECL_INITIAL (decl), pset);
+	    fpp_walk_tree (&DECL_SIZE (decl), pset);
+	    fpp_walk_tree (&DECL_SIZE_UNIT (decl), pset);
+	  }
+	fpp_walk_tree (&BIND_EXPR_BODY (*tp), pset);
+      }
+      break;
+
+    case STATEMENT_LIST:
+      {
+	tree_stmt_iterator i;
+	for (i = tsi_start (*tp); !tsi_end_p (i); tsi_next (&i))
+	  fpp_walk_tree (&(*tsi_stmt_ptr (i)), pset);
+      }
+      break;
+
+    /* TODO: remove these? */
+    case OMP_CLAUSE:
+      switch (OMP_CLAUSE_CODE (*tp))
+	{
+	case OMP_CLAUSE_PRIVATE:
+	case OMP_CLAUSE_SHARED:
+	case OMP_CLAUSE_FIRSTPRIVATE:
+	case OMP_CLAUSE_COPYIN:
+	case OMP_CLAUSE_COPYPRIVATE:
+	case OMP_CLAUSE_FINAL:
+	case OMP_CLAUSE_IF:
+	case OMP_CLAUSE_NUM_THREADS:
+	case OMP_CLAUSE_SCHEDULE:
+	  fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, 0), pset);
+	  /* FALLTHRU */
+
+	case OMP_CLAUSE_NOWAIT:
+	case OMP_CLAUSE_ORDERED:
+	case OMP_CLAUSE_DEFAULT:
+	case OMP_CLAUSE_UNTIED:
+	case OMP_CLAUSE_MERGEABLE:
+	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  break;
+
+	case OMP_CLAUSE_LASTPRIVATE:
+	  fpp_walk_tree (&OMP_CLAUSE_DECL (*tp), pset);
+	  fpp_walk_tree (&OMP_CLAUSE_LASTPRIVATE_STMT (*tp), pset);
+	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  break;
+
+	case OMP_CLAUSE_COLLAPSE:
+	  {
+	    int i;
+	    for (i = 0; i < 3; i++)
+	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset);
+	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  }
+	  break;
+
+	case OMP_CLAUSE_REDUCTION:
+	  {
+	    int i;
+	    for (i = 0; i < 4; i++)
+	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset);
+	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  }
+	  break;
+
+	default:
+	  gcc_unreachable ();
+	}
+      break;
+
+    case TARGET_EXPR:
+      {
+	int i, len;
+
+	/* TARGET_EXPRs are peculiar: operands 1 and 3 can be the same.
+	   But, we only want to walk once.  */
+	len = (TREE_OPERAND (*tp, 3) == TREE_OPERAND (*tp, 1)) ? 2 : 3;
+	for (i = 0; i <= len; ++i)
+	  fpp_walk_tree (&TREE_OPERAND (*tp, i), pset);
+      }
+      break;
+
+    default:
+      if (IS_EXPR_CODE_CLASS (TREE_CODE_CLASS (code)))
+	{
+	  int i, len;
+
+	  /* Walk over all the sub-trees of this operand.  */
+	  len = TREE_OPERAND_LENGTH (*tp);
+
+	  /* Go through the subtrees.  We need to do this in forward order so
+	     that the scope of a FOR_EXPR is handled properly.  */
+	  if (len)
+	    {
+	      for (i = 0; i < len - 1; ++i)
+		fpp_walk_tree (&TREE_OPERAND (*tp, i), pset);
+	    }
+	}
+      break;
     }
 
-  switch (TREE_CODE (t))
+  /* Now, do the transformations after the subtrees have been handled */
+  switch (code)
     {
     case CALL_EXPR:
       {
 	fpp_transform_call_expr (tp);
-	*walk_subtrees = 0; //TODO: what about nested function calls?
 	break;
       }
     case LT_EXPR:
@@ -347,32 +503,23 @@ fpp_transform_tree (tree *tp,
     case EQ_EXPR:
     case NE_EXPR:
       {
-	fpp_transform_compare_expr (t);
+	fpp_transform_compare_expr (*tp);
 	break;
       }
     case MODIFY_EXPR:
     case INIT_EXPR:
       {
-	fpp_transform_assignment_expr (t);
+	fpp_transform_assignment_expr (*tp);
 	break;
       }
     case BIND_EXPR:
       {
-	fpp_transform_bind_expr (t);
+	fpp_transform_bind_expr (*tp);
 	break;
       }
     default:
       break;
     }
-
-  return NULL;
-}
-
-void fpp_analyze_function (tree fndecl)
-{
-  init_functions ();
-
-  walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl), &fpp_transform_tree, NULL);
 }
 
 void fpp_register_disable_attribute () {
