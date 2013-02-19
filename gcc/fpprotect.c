@@ -13,6 +13,7 @@
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
+static GTY(()) tree fpp_del_fndecl = NULL_TREE;
 
 static GTY(()) struct attribute_spec disable_attribute_spec =
   {  "fpprotect_disable",
@@ -132,6 +133,7 @@ init_functions (void)
   tree fpp_protect_type = ptr_type_node;
   tree fpp_verify_type = void_type_node;
   tree fpp_eq_type = integer_type_node;
+  tree fpp_del_type = void_type_node;
   tree void_pointer_args;
   tree compare_arg_types;
 
@@ -165,6 +167,13 @@ init_functions (void)
   fpp_eq_fndecl = build_fn_decl ("__fpp_eq",
       fpp_eq_type);
   set_fndecl_attributes (fpp_eq_fndecl);
+
+  //__fpp_del
+  fpp_del_type = build_function_type (fpp_del_type,
+      void_pointer_args);
+  fpp_del_fndecl = build_fn_decl ("__fpp_del",
+      fpp_del_type);
+  set_fndecl_attributes (fpp_del_fndecl);
 }
 
 static void fpp_transform_call_expr (tree *expr_p);
@@ -281,11 +290,32 @@ static bool fpp_transform_var_decl (tree decl)
 static void fpp_transform_bind_expr (tree expr)
 {
   tree decl;
+  tree stmt;
+  tree body = NULL;
 
   for (decl = BIND_EXPR_VARS (expr); decl; decl = DECL_CHAIN (decl))
     {
       if (TREE_CODE (decl) == VAR_DECL)
-	fpp_transform_var_decl (decl);
+	{
+	  if (fpp_transform_var_decl (decl) || TREE_USED (decl))
+	    {
+	      /* Either __fpp_protect call has been inserted, or the variable
+	       * will be assigned later. Insert calls to __fpp_del when this
+	       * scope is left. */
+	      stmt = build_call_expr (fpp_del_fndecl, 1, decl);
+	      append_to_statement_list (stmt, &body);
+	    }
+	}
+    }
+
+  if (body)
+    {
+      BIND_EXPR_BODY (expr) = 
+	build2_loc (EXPR_LOCATION (BIND_EXPR_BODY (expr)), 
+		    TRY_FINALLY_EXPR, 
+		    void_type_node, 
+		    BIND_EXPR_BODY (expr), 
+		    body);
     }
 }
 
