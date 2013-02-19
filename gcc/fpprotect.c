@@ -251,29 +251,31 @@ static void fpp_transform_assignment_expr (tree expr)
       TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
 }
 
-static void fpp_transform_var_decl (tree decl)
+static bool fpp_transform_var_decl (tree decl)
 {
   tree initial = DECL_INITIAL (decl);
 
   if (!initial)
-    return;
+    return false;
 
   if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (initial)))
-    return;
+    return false;
 
   if (TREE_CODE (initial) == CALL_EXPR)
-    return;
+    return false;
 
   if (!func_pointer_has_guard (decl))
-    return;
+    return false;
 
   if (integer_zerop (initial))
-    return;
+    return false;
 
   if (!func_pointer_has_guard (initial))
     {
       DECL_INITIAL (decl) = build_call_expr (fpp_protect_fndecl, 1, initial);
     }
+
+  return true;
 
 }
 static void fpp_transform_bind_expr (tree expr)
