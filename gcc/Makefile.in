@@ -2644,7 +2644,7 @@ targhooks.o : targhooks.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TREE_H) \
 common/common-targhooks.o : common/common-targhooks.c $(CONFIG_H) $(SYSTEM_H) \
    coretypes.h $(INPUT_H) $(TM_H) $(COMMON_TARGET_H) common/common-targhooks.h
 fpprotect.o : $(CONFIG_H) $(SYSTEM_H) $(CORETYPES_H) $(TREE_H) $(GGC_H) $(CGRAPH_H) \
-   $(TREE_ITERATOR_H) $(PLUGIN_H) fpprotect.c gt-fpprotect.h
+   $(TREE_ITERATOR_H) $(PLUGIN_H) pointer-set.h fpprotect.c gt-fpprotect.h
 
 bversion.h: s-bversion; @true
 s-bversion: BASE-VER
