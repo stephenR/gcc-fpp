@@ -251,6 +251,7 @@ static void fpp_transform_assignment_expr (tree expr)
   else
     {
       TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
+    }
 }
 
 static bool fpp_transform_var_decl (tree decl)
@@ -314,6 +315,18 @@ static void fpp_transform_bind_expr (tree expr)
 		    BIND_EXPR_BODY (expr), 
 		    body);
     }
+}
+
+static void fpp_transform_return_expr (tree expr)
+{
+  tree val = TREE_OPERAND (expr, 0);
+
+  if (!val)
+    return;
+
+  if (TREE_CODE (val) == MODIFY_EXPR ||
+	TREE_CODE (val) == INIT_EXPR)
+    fpp_transform_assignment_expr (val);
 }
 
 static void fpp_walk_tree (tree *tp, struct pointer_set_t *pset);
@@ -533,6 +546,11 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
     case BIND_EXPR:
       {
 	fpp_transform_bind_expr (*tp);
+	break;
+      }
+    case RETURN_EXPR:
+      {
+	fpp_transform_return_expr (*tp);
 	break;
       }
     default:
