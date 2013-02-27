@@ -114,12 +114,14 @@ void *__fpp_protect(void *p)
 	struct jp_element *elem = NULL;
 	struct jp_region *region = region_list;
 
-	if (!initialized())
-		return p;
-
 	/* ignore NULL pointer */
 	if (!p)
 		return p;
+
+	if (!initialized()) {
+		fputs("libfpprotect: __fpp_protect not initialized, aborting!", stderr);
+		_exit(1);
+	}
 
 	while (1) {
 		if (region->free_stack) {
