@@ -116,7 +116,7 @@ void fpp_build_globals_initializer() {
   }
 
   if (body)
-    cgraph_build_static_cdtor('I', body, MAX_RESERVED_INIT_PRIORITY);
+    cgraph_build_static_cdtor('I', body, MAX_RESERVED_INIT_PRIORITY+2);
 }
 
 static void set_fndecl_attributes (tree fndecl)
