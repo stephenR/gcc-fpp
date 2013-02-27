@@ -154,17 +154,19 @@ void *__fpp_protect(void *p)
 	return elem;
 }
 
-void __fpp_verify(void *p)
+void *__fpp_verify(void *p)
 {
+	const struct jp_element *elem = p;
+
 	if (!initialized())
-		return;
+		return p;
 
 	if(!pointer_in_region_list(p)) {
 		fprintf(stderr, "libfpprotect: __fpp_verify failed with p=%p, aborting!", p);
 		_exit(1);
 	}
 
-	return;
+	return elem->addr;
 }
 
 void *__fpp_get_addr(void *p)

@@ -131,7 +131,7 @@ static void
 init_functions (void)
 {
   tree fpp_protect_type = ptr_type_node;
-  tree fpp_verify_type = void_type_node;
+  tree fpp_verify_type = ptr_type_node;
   tree fpp_eq_type = integer_type_node;
   tree void_pointer_args;
   tree compare_arg_types;
@@ -179,18 +179,9 @@ static void fpp_transform_call_expr (tree *expr_p)
   if (!func_pointer_has_guard (call_fn))
     return;
 
-  temp = build_decl (EXPR_LOCATION (expr),
-			  VAR_DECL, NULL_TREE, TREE_TYPE (call_fn));
-  DECL_ARTIFICIAL (temp) = 1;
-  DECL_IGNORED_P (temp) = 1;
-  DECL_CONTEXT (temp) = current_function_decl;
-  layout_decl (temp, 0);
-  temp = build4 (TARGET_EXPR, TREE_TYPE (call_fn), temp, call_fn, NULL_TREE, NULL_TREE);
-  TREE_SIDE_EFFECTS (temp) = 1;
-
-  verify_call = build_call_expr (fpp_verify_fndecl, 1, temp);
-  CALL_EXPR_FN (expr) = temp;
-  *expr_p = build2 (COMPOUND_EXPR, TREE_TYPE (expr), verify_call, expr);
+  verify_call = build_call_expr (fpp_verify_fndecl, 1, call_fn);
+  TREE_TYPE (verify_call) = TREE_TYPE (CALL_EXPR_FN (expr));
+  CALL_EXPR_FN (expr) = verify_call;
 }
 
 static void fpp_transform_compare_expr (tree expr)
