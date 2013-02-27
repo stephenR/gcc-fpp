@@ -168,13 +168,33 @@ init_functions (void)
   set_fndecl_attributes (fpp_eq_fndecl);
 }
 
+static void fpp_transform_addr_expr (tree *expr_p)
+{
+  tree expr = *expr_p;
+  tree val = TREE_OPERAND (expr, 0);
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (expr)))
+    return;
+
+  *expr_p = protected_ptr_addr (val);
+}
 
 static void fpp_transform_call_expr (tree *expr_p)
 {
   tree expr = *expr_p;
   tree call_fn = CALL_EXPR_FN (expr);
   tree verify_call;
-  tree temp;
+  call_expr_arg_iterator iter;
+  int i;
+
+  for (i = 0; i < call_expr_nargs (expr); ++i)
+    {
+      tree *arg_p = &CALL_EXPR_ARG (expr, i);
+      if (TREE_CODE (*arg_p) == NOP_EXPR)
+	      arg_p = &TREE_OPERAND (*arg_p, 0);
+      if (func_addr_expr_p (*arg_p))
+	fpp_transform_addr_expr (arg_p);
+    }
 
   if (!func_pointer_has_guard (call_fn))
     return;
