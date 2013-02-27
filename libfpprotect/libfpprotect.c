@@ -21,30 +21,19 @@ struct jp_element {
 	char jmp_asm_pre[sizeof(jmp_asm_pre)];
 	void *addr;
 	char jmp_asm_post[sizeof(jmp_asm_post)];
-	int refcnt;
 } __attribute__((packed));
 
-struct jp_empty_slot {
-	void *next;
-};
-
-union jp_slot {
-	struct jp_element filled;
-	struct jp_empty_slot empty;
-};
-
 struct jp_region {
-	union jp_slot *free_list;
-	union jp_slot *free_stack;
+	struct jp_element *free_stack;
 	struct jp_region *next;
 	size_t size;
-	union jp_slot slots[];
+	struct jp_element slots[];
 };
 
 static struct jp_region * const volatile region_list __attribute__((section(".rodata"))) = NULL;
 
 #define INITIAL_NUM_ELEMENTS 256
-static const size_t mmap_size = sizeof(struct jp_region) + INITIAL_NUM_ELEMENTS*sizeof(union jp_slot);
+static const size_t mmap_size = sizeof(struct jp_region) + INITIAL_NUM_ELEMENTS*sizeof(struct jp_element);
 
 static struct jp_region *create_region();
 static void lock(struct jp_region *region);
@@ -136,20 +125,13 @@ void *__fpp_protect(void *p)
 	while (1) {
 		if (region->free_stack) {
 			unlock(region);
-			elem = &region->free_stack->filled;
+			elem = region->free_stack;
 			++region->free_stack;
 			if ((void *) region->free_stack >= region_end(region)) {
 				region->free_stack = NULL;
 			}
 			break;
 		}
-
-		if (region->free_list) {
-			unlock(region);
-			elem = &region->free_list->filled;
-			region->free_list = region->free_list->empty.next;
-			break;
-		} 
 
 		if (region->next) {
 			region = region->next;
@@ -168,7 +150,6 @@ void *__fpp_protect(void *p)
 	memcpy(elem->jmp_asm_pre, jmp_asm_pre, sizeof(jmp_asm_pre));
 	memcpy(elem->jmp_asm_post, jmp_asm_post, sizeof(jmp_asm_post));
 	elem->addr = p;
-	elem->refcnt = 1;
 	lock(region);
 	return elem;
 }
@@ -223,7 +204,7 @@ static int try_resize(struct jp_region *region)
 		return -1;
 
 	unlock(region);
-	region->free_stack = (union jp_slot *) ((char *) region + region->size);
+	region->free_stack = (struct jp_element *) ((char *) region + region->size);
 	region->size = new_size;
 	lock(region);
 
@@ -242,98 +223,4 @@ int __fpp_eq(const void *p, const void *q)
 	return (p == q);
 }
 
-static struct jp_region *get_region_for(union jp_slot *slot) {
-	struct jp_region *region = region_list;
-	while (region) {
-		if (pointer_in_region(slot, region))
-			return region;
-		region = region->next;
-	}
-	return NULL;
-}
-
-void __fpp_del(void *p)
-{
-	struct jp_region *region;
-	union jp_slot *slot = (union jp_slot *) p;
-
-	if (!slot)
-		return;
-
-	if (!slot->filled.refcnt)
-		return;
-
-	region = get_region_for(slot);
-
-#ifdef DEBUG
-	if (!region) {
-		fprintf(stderr, "libfpprotect: __fpp_del failed with slot=%p, aborting!", slot);
-		_exit(2);
-	}
-#endif
-
-	unlock(region);
-	--slot->filled.refcnt;
-	if (!slot->filled.refcnt) {
-		slot->filled.addr = NULL;
-		slot->empty.next = region->free_list;
-		region->free_list = slot;
-	}
-	lock(region);
-
-}
-
-void *__fpp_copy(void *p)
-{
-	struct jp_region *region;
-	union jp_slot *slot = (union jp_slot *) p;
-
-	if (!slot)
-		return NULL;
-
-	if (!slot->filled.refcnt)
-		return slot;
-
-	region = get_region_for(slot);
-
-#ifdef DEBUG
-	if (!region) {
-		fprintf(stderr, "libfpprotect: __fpp_copy failed with slot=%p, aborting!", slot);
-		_exit(2);
-	}
-#endif
-
-	unlock(region);
-        ++slot->filled.refcnt;
-	lock(region);
-
-	return slot;
-}
-
-void __fpp_make_immutable(void *p)
-{
-	struct jp_region *region;
-	union jp_slot *slot = (union jp_slot *) p;
-
-	if (!slot)
-		return;
-
-	if (!slot->filled.refcnt)
-		return;
-
-	region = get_region_for(slot);
-
-#ifdef DEBUG
-	if (!region) {
-		fprintf(stderr, "libfpprotect: __fpp_make_immutable failed with slot=%p, aborting!", slot);
-		_exit(2);
-	}
-#endif
-
-	unlock(region);
-        slot->filled.refcnt = 0;
-	lock(region);
-
-	return;
-}
 
