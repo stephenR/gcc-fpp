@@ -215,6 +215,9 @@ static void fpp_transform_assignment_expr (tree expr)
   tree lval = TREE_OPERAND (expr, 0);
   tree rval = TREE_OPERAND (expr, 1);
 
+  if (TREE_CODE (rval) == NOP_EXPR)
+    rval = TREE_OPERAND (rval, 0);
+
   if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (lval)))
     return;
 
@@ -239,6 +242,9 @@ static void fpp_transform_var_decl (tree decl)
 
   if (!initial)
     return;
+
+  if (TREE_CODE (initial) == NOP_EXPR)
+    initial = TREE_OPERAND (initial, 0);
 
   if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (initial)))
     return;
