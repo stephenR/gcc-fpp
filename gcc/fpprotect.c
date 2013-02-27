@@ -475,7 +475,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	     that the scope of a FOR_EXPR is handled properly.  */
 	  if (len)
 	    {
-	      for (i = 0; i < len - 1; ++i)
+	      for (i = 0; i < len; ++i)
 		fpp_walk_tree (&TREE_OPERAND (*tp, i), pset);
 	    }
 	}
