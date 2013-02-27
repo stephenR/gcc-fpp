@@ -103,7 +103,6 @@ static struct jp_region *create_region()
 		perror("libfpprotect: mmap");
 		_exit(4);
 	}
-	/* TODO: is the mmap memory always initialized to 0? */
 	region->free_stack = region->slots;
 	region->size = mmap_size;
 	lock(region);
