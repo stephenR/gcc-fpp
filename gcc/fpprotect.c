@@ -15,6 +15,13 @@ static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
 
+struct GTY((chain_next ("%h.next"))) fpp_global_var
+{
+  tree decl;
+  struct fpp_global_var *next;
+};
+static GTY(()) struct fpp_global_var *globals = 0;
+
 static GTY(()) struct attribute_spec disable_attribute_spec =
   {  "fpprotect_disable",
      0,
@@ -26,6 +33,67 @@ static GTY(()) struct attribute_spec disable_attribute_spec =
      false
   };
 
+static tree
+get_protected_name (tree name)
+{
+  const char *suffix;
+  int len;
+  char *new_name;
+
+  suffix = ".fpp";
+  len = IDENTIFIER_LENGTH (name) + strlen(suffix);
+
+  new_name = (char *) alloca (len + 1);
+  strcpy (new_name, IDENTIFIER_POINTER (name));
+  strcat (new_name, suffix);
+
+  return get_identifier_with_length (new_name, len);
+}
+
+static tree lookup_global_var (tree name)
+{
+  const struct fpp_global_var *global = globals;
+  while (global)
+    {
+      if (DECL_NAME (global->decl) == name)
+	return global->decl;
+      global = global->next;
+    }
+  return NULL_TREE;
+}
+
+static void add_global_var (tree decl)
+{
+  struct fpp_global_var *new_var = ggc_alloc_fpp_global_var ();
+  //struct fpp_global_var *new_var = NULL;
+  new_var->next = globals;
+  new_var->decl = decl;
+  globals = new_var;
+}
+
+static tree protected_ptr_addr (tree fn)
+{
+  tree protected_ptr;
+  tree protected_name = get_protected_name (DECL_ASSEMBLER_NAME (fn));
+
+  protected_ptr = lookup_global_var (protected_name);
+
+  if (protected_ptr)
+    return protected_ptr;
+
+  protected_ptr = add_new_static_var (build_pointer_type (TREE_TYPE (fn)));
+  DECL_INITIAL (protected_ptr) = build1 (ADDR_EXPR, build_pointer_type (TREE_TYPE (fn)), fn);
+  DECL_NAME (protected_ptr) = protected_name;
+  TREE_PUBLIC (protected_ptr) = 0;
+
+  /* set a custom section so that ipa_discover_readonly_nonaddressable_vars won't declare this
+   * as readonly */
+  DECL_SECTION_NAME (protected_ptr) = build_string (5, ".fpp");
+
+  add_global_var (protected_ptr);
+
+  return protected_ptr;
+}
 
 static bool fpprotect_disable_attribute_p (tree node)
 {
@@ -37,6 +105,17 @@ static bool fpprotect_disable_attribute_p (tree node)
 	return true;
     }
   return false;
+}
+
+static bool func_addr_expr_p (tree var)
+{
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (var)))
+    return false;
+
+  if (!(TREE_CODE (var) == ADDR_EXPR))
+    return false;
+
+  return true;
 }
 
 static bool func_pointer_has_guard (tree var)
@@ -243,7 +322,15 @@ static void fpp_transform_assignment_expr (tree expr)
 
   if (!func_pointer_has_guard (rval))
     {
-      TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
+      if (func_addr_expr_p (rval))
+        {
+          rval = TREE_OPERAND (rval, 0);
+          TREE_OPERAND (expr, 1) = protected_ptr_addr (rval);
+        }
+      else
+	{
+	  TREE_OPERAND (expr, 1) = build_call_expr (fpp_protect_fndecl, 1, rval);
+	}
     }
 }
 
@@ -271,7 +358,15 @@ static void fpp_transform_var_decl (tree decl)
 
   if (!func_pointer_has_guard (initial))
     {
-      DECL_INITIAL (decl) = build_call_expr (fpp_protect_fndecl, 1, initial);
+      if (func_addr_expr_p (initial))
+        {
+          initial = TREE_OPERAND (initial, 0);
+          DECL_INITIAL (decl) = protected_ptr_addr (initial);
+        }
+      else
+	{
+	  DECL_INITIAL (decl) = build_call_expr (fpp_protect_fndecl, 1, initial);
+	}
     }
 }
 
