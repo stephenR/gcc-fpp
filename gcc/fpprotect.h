@@ -12,5 +12,7 @@ extern void fpp_analyze_function (tree fndecl);
 
 extern void fpp_register_disable_attribute ();
 
+extern void fpp_transform_globals ();
+
 #endif /* GCC_FPPROTECT_H */
 

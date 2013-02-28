@@ -75,6 +75,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple.h"
 #include "tree-ssa-alias.h"
 #include "plugin.h"
+#include "fpprotect.h"
 
 #if defined(DBX_DEBUGGING_INFO) || defined(XCOFF_DEBUGGING_INFO)
 #include "dbxout.h"
@@ -555,6 +556,9 @@ compile_file (void)
     return;
 
   ggc_protect_identifiers = false;
+
+  if (flag_fp_protect)
+    fpp_transform_globals ();
 
   /* This must also call finalize_compilation_unit.  */
   lang_hooks.decls.final_write_globals ();
