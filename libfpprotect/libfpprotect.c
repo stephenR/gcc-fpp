@@ -35,10 +35,19 @@ static struct jp_region * const volatile region_list __attribute__((section(".ro
 #define INITIAL_NUM_ELEMENTS 256
 static const size_t mmap_size = sizeof(struct jp_region) + INITIAL_NUM_ELEMENTS*sizeof(struct jp_element);
 
+#define PTR_REGION_ELEMENTS 256
+struct ptr_region {
+	size_t used_cnt;
+	void *slots[PTR_REGION_ELEMENTS];
+};
+
+static struct ptr_region *ptr_list;
+
 static struct jp_region *create_region();
 static void lock(struct jp_region *region);
 static void unlock(struct jp_region *region);
 static int try_resize(struct jp_region *region);
+static struct ptr_region *create_ptr_region();
 
 void __fpp_init() __attribute__ ((constructor(101)));
 void __fpp_init()
@@ -64,6 +73,7 @@ void __fpp_init()
 		_exit(3);
 	}
 
+	ptr_list = create_ptr_region();
 }
 
 static int initialized()
@@ -95,6 +105,17 @@ static int pointer_in_region_list(const void *p)
 	return 0;
 }
 
+static struct ptr_region *create_ptr_region()
+{
+	struct ptr_region *region = mmap(NULL, sizeof(struct ptr_region), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if(region == MAP_FAILED)
+	{
+		perror("libfpprotect: create_ptr_region: mmap");
+		_exit(4);
+	}
+	return region;
+}
+
 static struct jp_region *create_region()
 {
 	struct jp_region *region = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -120,6 +141,12 @@ void *__fpp_protect(void *p)
 
 	if (!initialized()) {
 		fputs("libfpprotect: __fpp_protect not initialized, aborting!", stderr);
+		_exit(1);
+	}
+
+	/* TODO: only for debugging purposes */
+	if(pointer_in_region_list(p)) {
+		fputs("libfpprotect: __fpp_protect called twice!", stderr);
 		_exit(1);
 	}
 
@@ -155,6 +182,27 @@ void *__fpp_protect(void *p)
 	return elem;
 }
 
+/* TODO: improve memory management */
+void *fpp_protect_func_ptr (void *p)
+{
+	void *ret;
+
+	if (!p)
+		return p;
+
+	ptr_list->slots[ptr_list->used_cnt] = __fpp_protect (p);
+
+	ret = (void *) &ptr_list->slots[ptr_list->used_cnt];
+
+	++ptr_list->used_cnt;
+
+	if (ptr_list->used_cnt >= PTR_REGION_ELEMENTS) {
+		ptr_list = create_ptr_region();
+	}
+
+	return ret;
+}
+
 void *__fpp_verify(void *p)
 {
 	const struct jp_element *elem = p;
@@ -170,12 +218,21 @@ void *__fpp_verify(void *p)
 	return elem->addr;
 }
 
-void *__fpp_get_addr(void *p)
+void *__fpp_deref(void *p)
 {
-	const struct jp_element *elem = p;
+	const struct jp_element *elem;
 
-	if (!pointer_in_region_list(p))
+	if (!p)
 		return p;
+
+	if (!initialized())
+		return *(void **) p;
+
+	elem = * (struct jp_element **) p;
+
+	/* This can happen with undefined weak symbols */
+	if (!elem)
+		return elem;
 
 	return elem->addr;
 }
@@ -201,13 +258,13 @@ static void unlock(struct jp_region *region)
 static int try_resize(struct jp_region *region)
 {
 	/* TODO: how much to increase? */
-	size_t new_size = region->size + mmap_size;
+	size_t new_size = region->size + INITIAL_NUM_ELEMENTS*sizeof(struct jp_element);
 
 	if (mremap(region, region->size, new_size, 0) == MAP_FAILED)
 		return -1;
 
 	unlock(region);
-	region->free_stack = (struct jp_element *) ((char *) region + region->size);
+	region->free_stack = region_end(region);
 	region->size = new_size;
 	lock(region);
 
@@ -219,6 +276,7 @@ int __fpp_eq(const void *p, const void *q)
 	if (pointer_in_region_list(p)) {
 		p = ((const struct jp_element *) p)->addr;
 	}
+
 	if (pointer_in_region_list(q)) {
 		q = ((const struct jp_element *) q)->addr;
 	}

@@ -14,6 +14,7 @@
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
+static GTY(()) tree fpp_deref_fndecl = NULL_TREE;
 
 struct GTY((chain_next ("%h.next"))) fpp_global_var
 {
@@ -39,20 +40,34 @@ static GTY(()) struct attribute_spec disable_attribute_spec =
   };
 
 static tree
-get_protected_name (tree name)
+get_protected_name (const char *name)
 {
   const char *suffix;
   int len;
   char *new_name;
 
   suffix = ".fpp";
-  len = IDENTIFIER_LENGTH (name) + strlen(suffix);
+  len = strlen (name) + strlen(suffix);
 
   new_name = (char *) alloca (len + 1);
-  strcpy (new_name, IDENTIFIER_POINTER (name));
+  strcpy (new_name, name);
   strcat (new_name, suffix);
 
   return get_identifier_with_length (new_name, len);
+}
+
+static tree
+get_protected_cst_name (tree cst)
+{
+  const char *prefix = "CST.";
+  char buf[sizeof (*prefix) + 2*HOST_BITS_PER_WIDE_INT/8 + 1];
+
+  snprintf(buf, sizeof(buf), "%s" HOST_WIDE_INT_PRINT_DOUBLE_HEX,
+      prefix,
+      (unsigned HOST_WIDE_INT) TREE_INT_CST_HIGH (cst),
+      (unsigned HOST_WIDE_INT) TREE_INT_CST_LOW (cst));
+
+  return get_protected_name (buf);
 }
 
 static tree lookup_global_var (tree name)
@@ -93,45 +108,67 @@ static void add_global_var (tree decl)
   globals = new_var;
 }
 
-static tree protected_ptr_addr (tree fn_addr)
-{
-  tree protected_ptr;
-  tree protected_ptr_addr;
-  tree fn = TREE_OPERAND (fn_addr, 0);
-  tree protected_name = get_protected_name (DECL_ASSEMBLER_NAME (fn));
-  tree type = TREE_TYPE (fn_addr);
+static tree get_protected_global_var (tree name, tree initial) {
+  tree type = TREE_TYPE (initial);
+  tree protected_global = lookup_global_var (name);
 
-  protected_ptr = lookup_global_var (protected_name);
+  if (protected_global)
+      return protected_global;
 
-  if (protected_ptr)
-    {
-      /* TODO refactor this */
-      protected_ptr_addr = build1 (ADDR_EXPR, type, protected_ptr);
-      return protected_ptr_addr;
-    }
-
-  protected_ptr = add_new_static_var (type);
-  DECL_INITIAL (protected_ptr) = build1 (ADDR_EXPR, type, fn);
-  DECL_NAME (protected_ptr) = protected_name;
-  TREE_PUBLIC (protected_ptr) = 0;
+  protected_global = add_new_static_var (type);
+  DECL_INITIAL (protected_global) = initial;
+  DECL_NAME (protected_global) = name;
+  TREE_PUBLIC (protected_global) = 0;
 
   /* set a custom section so that ipa_discover_readonly_nonaddressable_vars won't declare this
    * as readonly */
-  DECL_SECTION_NAME (protected_ptr) = build_string (5, ".fpp");
+  DECL_SECTION_NAME (protected_global) = build_string (5, ".fpp");
 
-  add_global_var (protected_ptr);
+  add_global_var (protected_global);
 
-  /* the type is intentionally left as pointer to function */
-  protected_ptr_addr = build1 (ADDR_EXPR, type, protected_ptr);
+  return protected_global;
+}
 
-  return protected_ptr_addr;
+static tree replace_integer_cst (tree cst)
+{
+  tree type = TREE_TYPE (cst);
+  tree protected_name = get_protected_cst_name (cst);
+  tree protected_global;
+
+  protected_global = get_protected_global_var (protected_name, cst);
+
+  return build1 (ADDR_EXPR, type, protected_global);
+}
+
+static tree replace_addr_expr (tree fn_addr)
+{
+  tree protected_ptr;
+  tree fn = TREE_OPERAND (fn_addr, 0);
+  tree protected_name = get_protected_name (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (fn)));
+  tree type = TREE_TYPE (fn_addr);
+
+  if (in_globals (fn))
+    return fn_addr;
+
+  protected_ptr = get_protected_global_var (protected_name, fn_addr);
+
+  return build1 (ADDR_EXPR, type, protected_ptr);
 }
 
 static bool fpprotect_disable_attribute_p (tree node)
 {
   tree attributes;
+  tree type;
 
-  for (attributes = TYPE_ATTRIBUTES (TREE_TYPE (node)); attributes; attributes = TREE_CHAIN (attributes))
+  if (!CODE_CONTAINS_STRUCT (TREE_CODE (node), TS_TYPED))
+    return false;
+
+  type = TREE_TYPE (node);
+
+  if (!type || type == error_mark_node)
+    return false;
+
+  for (attributes = TYPE_ATTRIBUTES (type); attributes; attributes = TREE_CHAIN (attributes))
     {
       if (is_attribute_p (disable_attribute_spec.name, TREE_PURPOSE (attributes)))
 	return true;
@@ -139,32 +176,22 @@ static bool fpprotect_disable_attribute_p (tree node)
   return false;
 }
 
-static bool func_addr_expr_p (tree var)
-{
-  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (var)))
-    return false;
-
-  if (!(TREE_CODE (var) == ADDR_EXPR))
-    return false;
-
-  return true;
-}
-
 static bool read_only_p (tree var)
 {
   return (TREE_CONSTANT (var) || TREE_READONLY (var));
 }
 
-static void fpp_transform_var_decl (tree decl);
-
 void fpp_build_globals_initializer() {
   tree body = NULL_TREE;
-  struct fpp_global_var *global;
+  struct varpool_node *node;
 
-  FOR_EACH_GLOBAL(global)
+  FOR_EACH_VARIABLE(node)
     {
+      if (!in_globals (node->symbol.decl))
+	continue;
+
       tree stmt;
-      tree decl = global->decl;
+      tree decl = node->symbol.decl;
 
       stmt = build_call_expr (fpp_protect_fndecl, 1, decl);
       stmt = build2 (MODIFY_EXPR, TREE_TYPE (decl),
@@ -192,6 +219,7 @@ init_functions (void)
   tree fpp_protect_type = ptr_type_node;
   tree fpp_verify_type = ptr_type_node;
   tree fpp_eq_type = integer_type_node;
+  tree fpp_deref_type = ptr_type_node;
   tree void_pointer_args;
   tree compare_arg_types;
 
@@ -225,7 +253,16 @@ init_functions (void)
   fpp_eq_fndecl = build_fn_decl ("__fpp_eq",
       fpp_eq_type);
   set_fndecl_attributes (fpp_eq_fndecl);
+
+  //__fpp_deref
+  fpp_deref_type = build_function_type (fpp_deref_type,
+      void_pointer_args);
+  fpp_deref_fndecl = build_fn_decl ("__fpp_deref",
+      fpp_deref_type);
+  set_fndecl_attributes (fpp_deref_fndecl);
 }
+
+static void fpp_walk_tree_without_duplicates (tree *tp);
 
 void fpp_transform_globals ()
 {
@@ -235,78 +272,35 @@ void fpp_transform_globals ()
 
   FOR_EACH_VARIABLE(node) {
     if (!in_globals (node->symbol.decl))
-      fpp_transform_var_decl (node->symbol.decl);
+      fpp_walk_tree_without_duplicates (&node->symbol.decl);
   }
 }
 
-static void fpp_transform_compare_expr (tree expr)
+static bool ptr_must_be_dereferenced (tree ptr)
 {
+  if (TREE_CODE (ptr) == INTEGER_CST)
+    return false;
+
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (ptr)))
+    return false;
+
+  if (fpprotect_disable_attribute_p (ptr))
+    return false;
+
+  return true;
+}
+
+static void fpp_transform_compare_expr (tree *expr_p)
+{
+  tree expr = *expr_p;
   tree left = TREE_OPERAND (expr, 0);
   tree right = TREE_OPERAND (expr, 1);
 
-  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (left)) && !FUNCTION_POINTER_TYPE_P (right))
-    return;
+  if (ptr_must_be_dereferenced (left))
+    TREE_OPERAND (expr, 0) = build_call_expr (fpp_deref_fndecl, 1, left);
 
-  if (integer_zerop (left) || integer_zerop (right))
-    return;
-
-  gcc_assert (TREE_CODE (expr) == EQ_EXPR || TREE_CODE (expr) == NE_EXPR);
-
-  TREE_OPERAND (expr, 0) = build_call_expr (fpp_eq_fndecl, 2, left, right);
-  TREE_OPERAND (expr, 1) = integer_zero_node;
-}
-
-static void fpp_protect_constructor (tree ctor);
-
-static tree fpp_protect_assignment (tree rval)
-{
-  if (!rval)
-    return rval;
-
-  if (TREE_CODE (rval) == NOP_EXPR)
-    rval = TREE_OPERAND (rval, 0);
-
-  if (TREE_CODE (rval) == CONSTRUCTOR)
-    {
-      fpp_protect_constructor (rval);
-      return rval;
-    }
-
-  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (rval)))
-    return rval;
-
-  if (TREE_CODE (rval) == CALL_EXPR)
-    return rval;
-
-  if (integer_zerop (rval))
-    return rval;
-
-  if (func_addr_expr_p (rval))
-    {
-      /* TODO */
-      if (!read_only_p (rval))
-	return rval;
-
-      return protected_ptr_addr (rval);
-    }
-  else
-    {
-      //return build_call_expr (fpp_protect_fndecl, 1, rval);
-      return rval;
-    }
-}
-
-static void fpp_protect_constructor (tree ctor)
-{
-  unsigned int i;
-  VEC(constructor_elt, gc) *v = CONSTRUCTOR_ELTS (ctor);
-  unsigned int ctor_len = CONSTRUCTOR_NELTS (ctor);
-
-  for (i = 0; i < ctor_len; ++i)
-    {
-      tree *val = &VEC_index (constructor_elt, v, i).value;
-      *val = fpp_protect_assignment (*val);
-    }
+  if (ptr_must_be_dereferenced (right))
+    TREE_OPERAND (expr, 0) = build_call_expr (fpp_deref_fndecl, 1, right);
 }
 
 static void fpp_transform_call_expr (tree *expr_p)
@@ -314,13 +308,6 @@ static void fpp_transform_call_expr (tree *expr_p)
   tree expr = *expr_p;
   tree call_fn = CALL_EXPR_FN (expr);
   tree verify_call;
-  int i;
-
-  for (i = 0; i < call_expr_nargs (expr); ++i)
-    {
-      tree *arg_p = &CALL_EXPR_ARG (expr, i);
-      *arg_p = fpp_protect_assignment (*arg_p);
-    }
 
   if (TREE_CODE (call_fn) == ADDR_EXPR)
     return;
@@ -334,58 +321,49 @@ static void fpp_transform_call_expr (tree *expr_p)
   CALL_EXPR_FN (expr) = verify_call;
 }
 
-static void fpp_transform_assignment_expr (tree expr)
+static bool fpp_check_transform (tree expr)
 {
-  tree rval = TREE_OPERAND (expr, 1);
+  if (!expr)
+    return false;
 
-  TREE_OPERAND (expr, 1) = fpp_protect_assignment (rval);
+  if (!FUNCTION_POINTER_TYPE_P (TREE_TYPE (expr)))
+    return false;
+
+  if (integer_zerop (expr))
+    return false;
+
+  if (!read_only_p (expr))
+    return false;
+
+  return true;
 }
 
-static void fpp_transform_var_decl (tree decl)
-{
-  tree initial = DECL_INITIAL (decl);
+static void fpp_transform_integer_cst (tree *expr_p) {
+  tree expr = *expr_p;
 
-  DECL_INITIAL (decl) = fpp_protect_assignment (initial);
+  if (!fpp_check_transform(expr))
+      return;
 
+  *expr_p = replace_integer_cst (expr);
 }
 
-static void fpp_transform_bind_expr (tree expr)
-{
-  tree decl;
+static void fpp_transform_addr_expr (tree *expr_p) {
+  tree expr = *expr_p;
 
-  for (decl = BIND_EXPR_VARS (expr); decl; decl = DECL_CHAIN (decl))
-    {
-      if (TREE_CODE (decl) == VAR_DECL)
-	  fpp_transform_var_decl (decl);
-    }
+  if (!fpp_check_transform(expr))
+      return;
+
+  *expr_p = replace_addr_expr (expr);
 }
 
-static void fpp_transform_return_expr (tree expr)
-{
-  tree val = TREE_OPERAND (expr, 0);
-
-  if (!val)
-    return;
-
-  if (TREE_CODE (val) == MODIFY_EXPR ||
-	TREE_CODE (val) == INIT_EXPR)
-    fpp_transform_assignment_expr (val);
-}
-
-static void fpp_walk_tree (tree *tp, struct pointer_set_t *pset);
 
 void fpp_analyze_function (tree fndecl)
 {
-  struct pointer_set_t *pset;
-  //init_functions ();
-
-  pset = pointer_set_create ();
-  fpp_walk_tree (&DECL_SAVED_TREE (fndecl), pset);
-  pointer_set_destroy (pset);
+  fpp_walk_tree_without_duplicates (&DECL_SAVED_TREE (fndecl));
 }
 
 static void
-fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
+fpp_walk_tree (tree *tp, struct pointer_set_t *pset, bool skip_addr_expr)
 {
   enum tree_code code;
 
@@ -395,6 +373,9 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
   /* Don't walk the same tree twice, if the user has requested
      that we avoid doing so.  */
   if (pset && pointer_set_insert (pset, *tp))
+    return;
+
+  if (fpprotect_disable_attribute_p (*tp))
     return;
 
   code = TREE_CODE (*tp);
@@ -417,9 +398,31 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	 above.  */
       break;
 
+    case ADDR_EXPR:
+      break;
+
+    case VAR_DECL:
+    case PARM_DECL:
+      if (DECL_INITIAL (*tp))
+	fpp_walk_tree (&DECL_INITIAL (*tp), pset, false);
+      break;
+
+    case CALL_EXPR:
+      {
+	int i;
+
+	fpp_walk_tree (&CALL_EXPR_FN (*tp), pset, true);
+
+	for (i = 0; i < call_expr_nargs (*tp); ++i)
+	  {
+	    fpp_walk_tree (&CALL_EXPR_ARG (*tp, i), pset, false);
+	  }
+      }
+      break;
+
     case TREE_LIST:
-      fpp_walk_tree (&TREE_VALUE (*tp), pset);
-      fpp_walk_tree (&TREE_CHAIN (*tp), pset);
+      fpp_walk_tree (&TREE_VALUE (*tp), pset, false);
+      fpp_walk_tree (&TREE_CHAIN (*tp), pset, false);
       break;
 
     case TREE_VEC:
@@ -430,7 +433,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	  break;
 
 	while (len--)
-	  fpp_walk_tree (&TREE_VEC_ELT (*tp, len), pset);
+	  fpp_walk_tree (&TREE_VEC_ELT (*tp, len), pset, false);
 
       }
       break;
@@ -443,12 +446,12 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	for (idx = 0;
 	     VEC_iterate(constructor_elt, CONSTRUCTOR_ELTS (*tp), idx, ce);
 	     idx++)
-	  fpp_walk_tree (&ce->value, pset);
+	  fpp_walk_tree (&ce->value, pset, false);
       }
       break;
 
     case SAVE_EXPR:
-      fpp_walk_tree (&TREE_OPERAND (*tp, 0), pset);
+      fpp_walk_tree (&TREE_OPERAND (*tp, 0), pset, false);
       break;
 
     case BIND_EXPR:
@@ -461,11 +464,11 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	       declared; they don't really belong to this part of the tree.
 	       And, we can see cycles: the initializer for a declaration
 	       can refer to the declaration itself.  */
-	    fpp_walk_tree (&DECL_INITIAL (decl), pset);
-	    fpp_walk_tree (&DECL_SIZE (decl), pset);
-	    fpp_walk_tree (&DECL_SIZE_UNIT (decl), pset);
+	    fpp_walk_tree (&DECL_INITIAL (decl), pset, false);
+	    fpp_walk_tree (&DECL_SIZE (decl), pset, false);
+	    fpp_walk_tree (&DECL_SIZE_UNIT (decl), pset, false);
 	  }
-	fpp_walk_tree (&BIND_EXPR_BODY (*tp), pset);
+	fpp_walk_tree (&BIND_EXPR_BODY (*tp), pset, false);
       }
       break;
 
@@ -473,7 +476,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
       {
 	tree_stmt_iterator i;
 	for (i = tsi_start (*tp); !tsi_end_p (i); tsi_next (&i))
-	  fpp_walk_tree (&(*tsi_stmt_ptr (i)), pset);
+	  fpp_walk_tree (&(*tsi_stmt_ptr (i)), pset, false);
       }
       break;
 
@@ -490,7 +493,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	case OMP_CLAUSE_IF:
 	case OMP_CLAUSE_NUM_THREADS:
 	case OMP_CLAUSE_SCHEDULE:
-	  fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, 0), pset);
+	  fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, 0), pset, false);
 	  /* FALLTHRU */
 
 	case OMP_CLAUSE_NOWAIT:
@@ -498,21 +501,21 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	case OMP_CLAUSE_DEFAULT:
 	case OMP_CLAUSE_UNTIED:
 	case OMP_CLAUSE_MERGEABLE:
-	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset, false);
 	  break;
 
 	case OMP_CLAUSE_LASTPRIVATE:
-	  fpp_walk_tree (&OMP_CLAUSE_DECL (*tp), pset);
-	  fpp_walk_tree (&OMP_CLAUSE_LASTPRIVATE_STMT (*tp), pset);
-	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	  fpp_walk_tree (&OMP_CLAUSE_DECL (*tp), pset, false);
+	  fpp_walk_tree (&OMP_CLAUSE_LASTPRIVATE_STMT (*tp), pset, false);
+	  fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset, false);
 	  break;
 
 	case OMP_CLAUSE_COLLAPSE:
 	  {
 	    int i;
 	    for (i = 0; i < 3; i++)
-	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset);
-	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset, false);
+	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset, false);
 	  }
 	  break;
 
@@ -520,8 +523,8 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	  {
 	    int i;
 	    for (i = 0; i < 4; i++)
-	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset);
-	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset);
+	      fpp_walk_tree (&OMP_CLAUSE_OPERAND (*tp, i), pset, false);
+	    fpp_walk_tree (&OMP_CLAUSE_CHAIN (*tp), pset, false);
 	  }
 	  break;
 
@@ -538,7 +541,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	   But, we only want to walk once.  */
 	len = (TREE_OPERAND (*tp, 3) == TREE_OPERAND (*tp, 1)) ? 2 : 3;
 	for (i = 0; i <= len; ++i)
-	  fpp_walk_tree (&TREE_OPERAND (*tp, i), pset);
+	  fpp_walk_tree (&TREE_OPERAND (*tp, i), pset, false);
       }
       break;
 
@@ -555,7 +558,7 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
 	  if (len)
 	    {
 	      for (i = 0; i < len; ++i)
-		fpp_walk_tree (&TREE_OPERAND (*tp, i), pset);
+		fpp_walk_tree (&TREE_OPERAND (*tp, i), pset, false);
 	    }
 	}
       break;
@@ -576,28 +579,40 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset)
     case EQ_EXPR:
     case NE_EXPR:
       {
-	fpp_transform_compare_expr (*tp);
+	fpp_transform_compare_expr (tp);
 	break;
       }
-    case MODIFY_EXPR:
-    case INIT_EXPR:
+    case ADDR_EXPR:
       {
-	fpp_transform_assignment_expr (*tp);
+	if (!skip_addr_expr)
+	  fpp_transform_addr_expr (tp);
 	break;
       }
-    case BIND_EXPR:
+    case INTEGER_CST:
       {
-	fpp_transform_bind_expr (*tp);
-	break;
-      }
-    case RETURN_EXPR:
-      {
-	fpp_transform_return_expr (*tp);
+	if (!skip_addr_expr)
+	  fpp_transform_integer_cst (tp);
 	break;
       }
     default:
       break;
     }
+}
+
+static void fpp_walk_tree_without_duplicates (tree *tp)
+{
+  struct pointer_set_t *pset;
+  struct fpp_global_var *global;
+
+  pset = pointer_set_create ();
+
+  FOR_EACH_GLOBAL(global)
+    {
+      pointer_set_insert (pset, global->decl);
+    }
+
+  fpp_walk_tree (tp, pset, false);
+  pointer_set_destroy (pset);
 }
 
 void fpp_register_disable_attribute () {
