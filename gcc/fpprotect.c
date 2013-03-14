@@ -121,7 +121,7 @@ static tree get_protected_global_var (tree name, tree initial) {
   TREE_PUBLIC (protected_global) = 0;
 
   /* set a custom section so that ipa_discover_readonly_nonaddressable_vars won't declare this
-   * as readonly */
+   * as readonly TODO: try DECL_PRESERVE_P*/
   DECL_SECTION_NAME (protected_global) = build_string (5, ".fpp");
 
   add_global_var (protected_global);
