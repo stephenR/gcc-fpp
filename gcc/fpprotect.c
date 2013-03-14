@@ -401,6 +401,20 @@ fpp_walk_tree (tree *tp, struct pointer_set_t *pset, bool skip_addr_expr)
     case ADDR_EXPR:
       break;
 
+    case LT_EXPR:
+    case LE_EXPR:
+    case GT_EXPR:
+    case GE_EXPR:
+    case EQ_EXPR:
+    case NE_EXPR:
+      fpp_walk_tree (&TREE_OPERAND (*tp, 0), pset, true);
+      fpp_walk_tree (&TREE_OPERAND (*tp, 1), pset, true);
+      break;
+
+    case NOP_EXPR:
+      fpp_walk_tree (&TREE_OPERAND (*tp, 0), pset, skip_addr_expr);
+      break;
+
     case VAR_DECL:
     case PARM_DECL:
       if (DECL_INITIAL (*tp))
