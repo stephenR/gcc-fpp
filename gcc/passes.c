@@ -1281,6 +1281,8 @@ init_optimization_passes (void)
   NEXT_PASS (pass_diagnose_omp_blocks);
   NEXT_PASS (pass_diagnose_tm_blocks);
   NEXT_PASS (pass_mudflap_1);
+  /* TODO check comment above, when to run this? */
+  NEXT_PASS (pass_fpprotect);
   NEXT_PASS (pass_lower_omp);
   NEXT_PASS (pass_lower_cf);
   NEXT_PASS (pass_lower_tm);
