@@ -198,7 +198,7 @@ extern _Unwind_Ptr _Unwind_GetRegionStart (struct _Unwind_Context *);
 
 typedef _Unwind_Reason_Code (*_Unwind_Personality_Fn)
      (int, _Unwind_Action, _Unwind_Exception_Class,
-      struct _Unwind_Exception *, struct _Unwind_Context *);
+      struct _Unwind_Exception *, struct _Unwind_Context *) __attribute__((fpprotect_disable));
 
 /* @@@ The following alternate entry points are for setjmp/longjmp
    based unwinding.  */

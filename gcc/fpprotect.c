@@ -13,11 +13,15 @@
 #include "tree-pass.h"
 #include "gimple.h"
 #include "diagnostic-core.h"
+#include "rtl.h"
+#include "expr.h"
+#include "optabs.h"
 
 static GTY(()) tree fpp_protect_fndecl = NULL_TREE;
 static GTY(()) tree fpp_verify_fndecl = NULL_TREE;
 static GTY(()) tree fpp_eq_fndecl = NULL_TREE;
 static GTY(()) tree fpp_deref_fndecl = NULL_TREE;
+static GTY(()) rtx fpp_protect_rtx = NULL_RTX;
 
 struct GTY((chain_next ("%h.next"))) fpp_global_var
 {
@@ -194,6 +198,7 @@ void fpp_build_globals_initializer() {
       append_to_statement_list (stmt, &body);
     }
 
+  /* TODO set this to the highest priority possible */
   if (body)
     cgraph_build_static_cdtor('I', body, MAX_RESERVED_INIT_PRIORITY+2);
 }
@@ -255,6 +260,8 @@ init_functions (void)
   fpp_deref_fndecl = build_fn_decl ("__fpp_deref",
       fpp_deref_type);
   set_fndecl_attributes (fpp_deref_fndecl);
+
+  fpp_protect_rtx = init_one_libfunc("fpp_protect_func_ptr");
 }
 
 static bool
@@ -391,7 +398,7 @@ transform_call (gimple_stmt_iterator *gsi)
       gimple_call_set_arg (stmt, num_args, replace_expr (gsi, arg));
     }
   
-  // TODO deref if needed in params
+  // TODO deref if needed in params (reuse code from transform_assign)
   //for (arg_chain = DECL_ARGUMENTS (fndecl); arg_chain; arg_chain = TREE_CHAIN (arg_chain))
   //  {
   //    gcc_assert (i < num_args);
@@ -594,7 +601,7 @@ static tree transform_global (tree *tp, int *walk_subtrees, void *data ATTRIBUTE
     {
     case ADDR_EXPR:
     case INTEGER_CST:
-      *tp = replace_expr (NULL, t);
+      *tp = replace_expr (/* no statement iterator */ NULL, t);
       *walk_subtrees = 0;
       break;
     default:
@@ -602,6 +609,26 @@ static tree transform_global (tree *tp, int *walk_subtrees, void *data ATTRIBUTE
     }
 
   return NULL_TREE;
+}
+
+bool init_or_fini_section (tree decl)
+{
+  const char *section_name;
+
+  if (!DECL_SECTION_NAME (decl))
+    return false;
+
+  section_name = TREE_STRING_POINTER (DECL_SECTION_NAME (decl));
+
+  if (strcmp(section_name, ".init_array") == 0
+      || strcmp(section_name, ".ctors") == 0)
+    return true;
+
+  if (strcmp(section_name, ".fini_array") == 0
+      || strcmp(section_name, ".dtors") == 0)
+    return true;
+
+  return false;
 }
 
 void fpp_transform_globals ()
@@ -613,10 +640,19 @@ void fpp_transform_globals ()
   FOR_EACH_VARIABLE(node)
     {
       tree decl = node->symbol.decl;
+      if (init_or_fini_section (decl))
+	continue;
       tree *initial = &DECL_INITIAL (decl);
       if (*initial && !in_globals (decl))
-	walk_tree_without_duplicates (initial, &transform_global, NULL);
+	walk_tree (initial, &transform_global, NULL, NULL);
+	//walk_tree_without_duplicates (initial, &transform_global, NULL);
     }
+}
+
+rtx fpp_expand_protect_call (rtx fun)
+{
+  return fun;
+  //return emit_library_call_value (fpp_protect_rtx, NULL_RTX, LCT_NORMAL, Pmode, 1, fun, Pmode);
 }
 
 #include "gt-fpprotect.h"

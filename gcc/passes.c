@@ -1552,6 +1552,7 @@ init_optimization_passes (void)
   NEXT_PASS (pass_mudflap_2);
   NEXT_PASS (pass_cleanup_cfg_post_optimizing);
   NEXT_PASS (pass_warn_function_noreturn);
+  /* possible location for the fpp pass */
 
   NEXT_PASS (pass_expand);
 

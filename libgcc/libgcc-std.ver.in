@@ -1934,4 +1934,8 @@ GCC_4.7.0 {
   __splitstack_find_context
   __splitstack_resetcontext
   __splitstack_releasecontext
+  __fpp_verify
+  __fpp_protect
+  __fpp_deref
+  fpp_protect_func_ptr
 }

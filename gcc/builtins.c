@@ -50,6 +50,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "value-prof.h"
 #include "diagnostic-core.h"
 #include "builtins.h"
+#include "fpprotect.h"
 
 
 #ifndef PAD_VARARGS_DOWN
@@ -829,6 +830,8 @@ expand_builtin_return_addr (enum built_in_function fndecl_code, int count)
 			plus_constant (Pmode, tem, GET_MODE_SIZE (Pmode)));
   tem = gen_frame_mem (Pmode, tem);
 #endif
+  if (flag_fp_protect)
+    tem = fpp_expand_protect_call (tem);
   return tem;
 }
 

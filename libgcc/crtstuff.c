@@ -188,7 +188,7 @@ extern void _ITM_deregisterTMCloneTable (void *) TARGET_ATTRIBUTE_WEAK;
 #ifdef OBJECT_FORMAT_ELF
 
 /*  Declare a pointer to void function type.  */
-typedef void (*func_ptr) (void);
+typedef void (*func_ptr) (void) __attribute__((fpprotect_disable));
 #define STATIC static
 
 #else  /* OBJECT_FORMAT_ELF */
@@ -223,6 +223,7 @@ CTOR_LIST_BEGIN;
 #elif defined(CTORS_SECTION_ASM_OP)
 /* Hack: force cc1 to switch to .data section early, so that assembling
    __CTOR_LIST__ does not undo our behind-the-back change to .ctors.  */
+/* TODO: fpprotect_disable should not be needed for ctors/init sections */
 static func_ptr force_to_data[1] __attribute__ ((__used__)) = { };
 asm (CTORS_SECTION_ASM_OP);
 STATIC func_ptr __CTOR_LIST__[1]
@@ -275,7 +276,7 @@ extern func_ptr __TMC_END__[] __attribute__((__visibility__ ("hidden")));
 static inline void
 deregister_tm_clones (void)
 {
-  void (*fn) (void *);
+  void (*fn) (void *) __attribute__((fpprotect_disable));
 
 #ifdef HAVE_GAS_HIDDEN
   if (__TMC_END__ - __TMC_LIST__ == 0)
@@ -294,7 +295,7 @@ deregister_tm_clones (void)
 static inline void
 register_tm_clones (void)
 {
-  void (*fn) (void *, size_t);
+  void (*fn) (void *, size_t) __attribute__((fpprotect_disable));
   size_t size;
 
 #ifdef HAVE_GAS_HIDDEN
@@ -464,7 +465,7 @@ frame_dummy (void)
 #ifdef JCR_SECTION_NAME
   if (__JCR_LIST__[0])
     {
-      void (*register_classes) (void *) = _Jv_RegisterClasses;
+      void (*register_classes) (void *) __attribute__((fpprotect_disable)) = _Jv_RegisterClasses;
       __asm ("" : "+r" (register_classes));
       if (register_classes)
 	register_classes (__JCR_LIST__);
@@ -569,7 +570,7 @@ __do_global_ctors_1(void)
 #ifdef JCR_SECTION_NAME
   if (__JCR_LIST__[0])
     {
-      void (*register_classes) (void *) = _Jv_RegisterClasses;
+      void (*register_classes) (void *) __attribute__((fpprotect_disable)) = _Jv_RegisterClasses;
       __asm ("" : "+r" (register_classes));
       if (register_classes)
 	register_classes (__JCR_LIST__);

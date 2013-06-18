@@ -960,6 +960,7 @@ GCC_PLUGIN_H = gcc-plugin.h highlev-plugin-common.h plugin.def \
 PLUGIN_H = plugin.h $(GCC_PLUGIN_H)
 PLUGIN_VERSION_H = plugin-version.h configargs.h
 LIBFUNCS_H = libfuncs.h $(HASHTAB_H)
+FPPROTECT_H = $(TREE_H)
 
 #
 # Now figure out from those variables how to compile and link.
@@ -1986,7 +1987,7 @@ default-c.o: config/default-c.c $(CONFIG_H) $(SYSTEM_H) coretypes.h \
 
 attribs.o : attribs.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(TREE_H) \
 	$(FLAGS_H) $(DIAGNOSTIC_CORE_H) $(GGC_H) $(TM_P_H) \
-	$(TARGET_H) langhooks.h $(CPPLIB_H) $(PLUGIN_H) fpprotect.h
+	$(TARGET_H) langhooks.h $(CPPLIB_H) $(PLUGIN_H) $(RTL_H) $(FPPROTECT_H)
 
 incpath.o: incpath.c incpath.h $(CONFIG_H) $(SYSTEM_H) $(CPPLIB_H) \
 		intl.h prefix.h coretypes.h $(TM_H) cppdefault.h $(TARGET_H) \
@@ -2485,7 +2486,7 @@ gimplify.o : gimplify.c $(CONFIG_H) $(SYSTEM_H) $(TREE_H) $(GIMPLE_H) \
    coretypes.h $(EXCEPT_H) $(FLAGS_H) $(RTL_H) $(FUNCTION_H) $(EXPR_H) \
    $(GGC_H) gt-gimplify.h $(HASHTAB_H) $(TARGET_H) $(DIAGNOSTIC_CORE_H) $(OPTABS_H) \
    $(SPLAY_TREE_H) $(VEC_H) tree-iterator.h $(TREE_PASS_H) $(TREE_PRETTY_PRINT_H) \
-   fpprotect.h
+   $(FPPROTECT_H)
 gimple-iterator.o : gimple-iterator.c $(CONFIG_H) $(SYSTEM_H) coretypes.h \
    $(TREE_H) $(GIMPLE_H) $(TREE_FLOW_H) value-prof.h
 gimple-fold.o : gimple-fold.c $(TREE_FLOW_H) $(CONFIG_H) coretypes.h dumpfile.h \
@@ -2643,8 +2644,8 @@ targhooks.o : targhooks.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TREE_H) \
    tree-ssa-alias.h $(TREE_FLOW_H)
 common/common-targhooks.o : common/common-targhooks.c $(CONFIG_H) $(SYSTEM_H) \
    coretypes.h $(INPUT_H) $(TM_H) $(COMMON_TARGET_H) common/common-targhooks.h
-fpprotect.o : $(CONFIG_H) $(SYSTEM_H) $(CORETYPES_H) $(TREE_H) $(GGC_H) $(CGRAPH_H) \
-   $(TREE_ITERATOR_H) $(PLUGIN_H) pointer-set.h fpprotect.c gt-fpprotect.h
+fpprotect.o : fpprotect.c $(CONFIG_H) $(SYSTEM_H) $(CORETYPES_H) $(GGC_H) $(CGRAPH_H) \
+  $(TREE_ITERATOR_H) $(PLUGIN_H) pointer-set.h $(RTL_H) $(EXPR_H) $(OPTABS_H) gt-fpprotect.h
 
 bversion.h: s-bversion; @true
 s-bversion: BASE-VER
@@ -2668,7 +2669,7 @@ toplev.o : toplev.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(TREE_H) \
    $(OPTS_H) params.def tree-mudflap.h $(TREE_PASS_H) $(GIMPLE_H) \
    tree-ssa-alias.h $(PLUGIN_H) realmpfr.h tree-diagnostic.h \
    $(TREE_PRETTY_PRINT_H) opts-diagnostic.h $(COMMON_TARGET_H) \
-   fpprotect.h
+   $(FPPROTECT_H)
 
 hwint.o : hwint.c $(CONFIG_H) $(SYSTEM_H) $(DIAGNOSTIC_CORE_H)
 
@@ -2754,7 +2755,7 @@ builtins.o : builtins.c builtins.h $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    hard-reg-set.h $(DIAGNOSTIC_CORE_H) hard-reg-set.h $(EXCEPT_H) \
    $(TM_P_H) $(PREDICT_H) $(LIBFUNCS_H) langhooks.h $(BASIC_BLOCK_H) \
    tree-mudflap.h realmpfr.h $(BUILTINS_DEF) $(MACHMODE_H) \
-   $(DIAGNOSTIC_CORE_H) $(TREE_FLOW_H) value-prof.h
+   $(DIAGNOSTIC_CORE_H) $(TREE_FLOW_H) value-prof.h $(FPPROTECT_H)
 calls.o : calls.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) $(RTL_H) \
    $(TREE_H) $(FLAGS_H) $(EXPR_H) $(OPTABS_H) langhooks.h $(TARGET_H) \
    $(LIBFUNCS_H) $(REGS_H) $(DIAGNOSTIC_CORE_H) output.h \
@@ -2843,7 +2844,7 @@ cgraphunit.o : cgraphunit.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    gt-cgraphunit.h tree-iterator.h $(COVERAGE_H) $(TREE_DUMP_H) \
    $(GIMPLE_PRETTY_PRINT_H) ipa-inline.h $(IPA_UTILS_H) \
    $(LTO_STREAMER_H) output.h $(REGSET_H) $(EXCEPT_H) $(GCC_PLUGIN_H) plugin.h \
-   fpprotect.h
+   $(FPPROTECT_H)
 cgraphclones.o : cgraphclones.c $(CONFIG_H) $(SYSTEM_H) coretypes.h $(TM_H) \
    $(TREE_H) langhooks.h $(TREE_INLINE_H) toplev.h $(DIAGNOSTIC_CORE_H) $(FLAGS_H) $(GGC_H) \
    $(TARGET_H) $(CGRAPH_H) intl.h pointer-set.h $(FUNCTION_H) $(GIMPLE_H) \
