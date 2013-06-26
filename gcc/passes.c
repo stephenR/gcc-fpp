@@ -1282,7 +1282,6 @@ init_optimization_passes (void)
   NEXT_PASS (pass_diagnose_tm_blocks);
   NEXT_PASS (pass_mudflap_1);
   /* TODO check comment above, when to run this? */
-  NEXT_PASS (pass_fpprotect);
   NEXT_PASS (pass_lower_omp);
   NEXT_PASS (pass_lower_cf);
   NEXT_PASS (pass_lower_tm);
@@ -1553,6 +1552,7 @@ init_optimization_passes (void)
   NEXT_PASS (pass_cleanup_cfg_post_optimizing);
   NEXT_PASS (pass_warn_function_noreturn);
   /* possible location for the fpp pass */
+  NEXT_PASS (pass_fpprotect);
 
   NEXT_PASS (pass_expand);
 
