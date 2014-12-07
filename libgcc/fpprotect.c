@@ -243,8 +243,8 @@ void *fpp_protect_func_ptr_perm (void *p)
 
 	fpp_mutex_lock();
 
-	if (!_fpp_ptr_list)
-		_fpp_ptr_list = create_region (FALSE);
+	if (!_fpp_perm_ptr_list)
+		_fpp_perm_ptr_list = create_region (FALSE);
 
 	global_var = find_protected_ptr(p);
 
